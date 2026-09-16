@@ -24,16 +24,23 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public AuthResponse register(@Valid @RequestBody AuthRequest request) {
-        return AuthResponse.from(authService.register(request.email(), request.password()));
+    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
+        return AuthResponse.from(authService.register(request.fullName(), request.email(), request.password()));
     }
 
     @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody AuthRequest request) {
+    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return AuthResponse.from(authService.login(request.email(), request.password()));
     }
 
-    public record AuthRequest(
+    public record RegisterRequest(
+            @NotBlank @Size(max = 120) String fullName,
+            @NotBlank @Email String email,
+            @NotBlank @Size(min = 8, max = 72) String password
+    ) {
+    }
+
+    public record LoginRequest(
             @NotBlank @Email String email,
             @NotBlank @Size(min = 8, max = 72) String password
     ) {

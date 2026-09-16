@@ -2,6 +2,6 @@
 *.iml
 .env
 target/
-out/
+/out/
 *.log
 .DS_Store

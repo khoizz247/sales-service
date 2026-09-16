@@ -3,6 +3,7 @@ package vn.edu.sales.application.service;
 import org.junit.jupiter.api.Test;
 import vn.edu.sales.application.port.out.ProductRepository;
 import vn.edu.sales.domain.model.Product;
+import vn.edu.sales.domain.model.ProductStatus;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -18,11 +19,12 @@ class ProductServiceTest {
         InMemoryProductRepository repository = new InMemoryProductRepository();
         ProductService service = new ProductService(repository);
 
-        Product product = service.create("  Sản phẩm A  ", "Mô tả", new BigDecimal("120000"), 5);
+        Product product = service.create("sku-001", "  Sản phẩm A  ", "Mô tả", new BigDecimal("120000"), 5);
 
         assertThat(product.id()).isEqualTo(1L);
         assertThat(product.name()).isEqualTo("Sản phẩm A");
-        assertThat(product.active()).isTrue();
+        assertThat(product.sku()).isEqualTo("SKU-001");
+        assertThat(product.status()).isEqualTo(ProductStatus.ACTIVE);
     }
 
     private static class InMemoryProductRepository implements ProductRepository {
@@ -32,11 +34,13 @@ class ProductServiceTest {
         public Product save(Product product) {
             Product saved = new Product(
                     (long) products.size() + 1,
+                    product.sku(),
                     product.name(),
                     product.description(),
                     product.price(),
-                    product.stock(),
-                    product.active()
+                    product.stockQuantity(),
+                    product.status(),
+                    0L
             );
             products.add(saved);
             return saved;
@@ -44,7 +48,7 @@ class ProductServiceTest {
 
         @Override
         public List<Product> findAllActive() {
-            return products.stream().filter(Product::active).toList();
+            return products.stream().filter(product -> product.status() == ProductStatus.ACTIVE).toList();
         }
 
         @Override
@@ -53,8 +57,18 @@ class ProductServiceTest {
         }
 
         @Override
-        public void deleteById(Long id) {
-            products.removeIf(product -> product.id().equals(id));
+        public List<Product> findAllByIdsForUpdate(List<Long> ids) {
+            return products.stream().filter(product -> ids.contains(product.id())).toList();
+        }
+
+        @Override
+        public List<Product> saveAll(List<Product> products) {
+            return products.stream().map(this::save).toList();
+        }
+
+        @Override
+        public boolean existsBySku(String sku) {
+            return products.stream().anyMatch(product -> product.sku().equals(sku));
         }
     }
 }

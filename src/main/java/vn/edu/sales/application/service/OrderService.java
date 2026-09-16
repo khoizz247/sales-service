@@ -1,0 +1,123 @@
+package vn.edu.sales.application.service;
+
+import vn.edu.sales.application.port.out.OrderRepository;
+import vn.edu.sales.application.port.out.ProductRepository;
+import vn.edu.sales.application.port.out.TransactionRunner;
+import vn.edu.sales.application.port.out.UserRepository;
+import vn.edu.sales.domain.exception.BusinessConflictException;
+import vn.edu.sales.domain.exception.ResourceNotFoundException;
+import vn.edu.sales.domain.model.*;
+
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+public class OrderService {
+    private final OrderRepository orderRepository;
+    private final ProductRepository productRepository;
+    private final UserRepository userRepository;
+    private final TransactionRunner transactionRunner;
+
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository,
+                        UserRepository userRepository, TransactionRunner transactionRunner) {
+        this.orderRepository = orderRepository;
+        this.productRepository = productRepository;
+        this.userRepository = userRepository;
+        this.transactionRunner = transactionRunner;
+    }
+
+    public Order create(String customerEmail, String recipientName, String recipientPhone,
+                        String shippingAddress, List<CreateLine> lines) {
+        if (lines == null || lines.isEmpty()) throw new IllegalArgumentException("Đơn hàng phải có sản phẩm");
+        Set<Long> uniqueIds = lines.stream().map(CreateLine::productId).collect(Collectors.toSet());
+        if (uniqueIds.size() != lines.size()) throw new IllegalArgumentException("Không được lặp sản phẩm trong đơn hàng");
+
+        return transactionRunner.execute(() -> {
+            User user = activeUser(customerEmail);
+            List<Long> ids = uniqueIds.stream().sorted().toList();
+            Map<Long, Product> products = productRepository.findAllByIdsForUpdate(ids).stream()
+                    .collect(Collectors.toMap(Product::id, Function.identity()));
+            List<Product> changedProducts = new ArrayList<>();
+            List<OrderItem> items = new ArrayList<>();
+
+            for (CreateLine line : lines) {
+                if (line.quantity() <= 0) throw new IllegalArgumentException("Số lượng phải lớn hơn 0");
+                Product product = products.get(line.productId());
+                if (product == null || product.status() != ProductStatus.ACTIVE) {
+                    throw new ResourceNotFoundException("Không tìm thấy sản phẩm: " + line.productId());
+                }
+                if (product.stockQuantity() < line.quantity()) {
+                    throw new BusinessConflictException("Không đủ tồn kho cho sản phẩm: " + product.name());
+                }
+                changedProducts.add(product.withStock(product.stockQuantity() - line.quantity()));
+                items.add(new OrderItem(null, product.id(), product.name(), product.price(),
+                        line.quantity(), product.price().multiply(BigDecimal.valueOf(line.quantity()))));
+            }
+
+            productRepository.saveAll(changedProducts);
+            return orderRepository.save(new Order(null, newOrderCode(), user.id(), recipientName,
+                    recipientPhone, shippingAddress, OrderStatus.PENDING, null, null, null, items));
+        });
+    }
+
+    public List<Order> getMine(String customerEmail) {
+        return orderRepository.findAllByUserId(activeUser(customerEmail).id());
+    }
+
+    public Order getMineById(String customerEmail, Long id) {
+        User user = activeUser(customerEmail);
+        return orderRepository.findById(id).filter(order -> order.userId().equals(user.id()))
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng: " + id));
+    }
+
+    public List<Order> getAll(OrderStatus status) {
+        return orderRepository.findAll(status);
+    }
+
+    public Order changeStatus(Long id, OrderStatus nextStatus) {
+        return transactionRunner.execute(() -> {
+            Order order = orderRepository.findByIdForUpdate(id)
+                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng: " + id));
+            if (order.status() == nextStatus) return order;
+            validateTransition(order.status(), nextStatus);
+            if (nextStatus == OrderStatus.CANCELLED) restoreStock(order);
+            return orderRepository.save(order.withStatus(nextStatus));
+        });
+    }
+
+    private void restoreStock(Order order) {
+        List<Long> ids = order.items().stream().map(OrderItem::productId).sorted().toList();
+        Map<Long, Product> products = productRepository.findAllByIdsForUpdate(ids).stream()
+                .collect(Collectors.toMap(Product::id, Function.identity()));
+        List<Product> changed = order.items().stream().map(item -> {
+            Product product = products.get(item.productId());
+            if (product == null) throw new BusinessConflictException("Không thể hoàn kho sản phẩm: " + item.productId());
+            return product.withStock(product.stockQuantity() + item.quantity());
+        }).toList();
+        productRepository.saveAll(changed);
+    }
+
+    private void validateTransition(OrderStatus current, OrderStatus next) {
+        boolean allowed = switch (current) {
+            case PENDING -> next == OrderStatus.CONFIRMED || next == OrderStatus.CANCELLED;
+            case CONFIRMED -> next == OrderStatus.SHIPPING || next == OrderStatus.CANCELLED;
+            case SHIPPING -> next == OrderStatus.COMPLETED;
+            case COMPLETED, CANCELLED -> false;
+        };
+        if (!allowed) throw new BusinessConflictException("Không thể chuyển trạng thái từ " + current + " sang " + next);
+    }
+
+    private User activeUser(String email) {
+        return userRepository.findByEmail(email.toLowerCase(Locale.ROOT))
+                .filter(user -> user.status() == UserStatus.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khách hàng"));
+    }
+
+    private String newOrderCode() {
+        return "ORD-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase(Locale.ROOT);
+    }
+
+    public record CreateLine(Long productId, int quantity) {
+    }
+}

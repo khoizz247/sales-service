@@ -16,6 +16,10 @@ users 1 --- N orders 1 --- N order_items N --- 1 products
 6. Optionally execute `03_create_local_user.sql` to create a local application account.
 7. In the **Schemas** panel, select refresh and expand `sales_service > Tables`.
 
+If you executed an older version of `01_schema.sql` before Order support was added, run
+`04_upgrade_existing_schema.sql` once. Do not run this upgrade file on a database freshly
+created from the latest `01_schema.sql`.
+
 Expected tables:
 
 ```text
@@ -50,8 +54,8 @@ After creating the database:
 
 ## Important notes
 
-- `line_total` is a generated column: MySQL calculates `unit_price * quantity`.
+- `line_total` is calculated by the application from the snapshot price and quantity.
 - Product deletion is represented by `status = 'INACTIVE'`; do not physically delete products referenced by orders.
 - Creating an order, inserting its items, and subtracting stock must happen in one transaction in the application.
-- The current Java entities still use the earlier base schema. Update the entities and repositories before pointing the application at this MySQL schema.
+- Run the application with `SPRING_PROFILES_ACTIVE=mysql` after executing all three scripts.
 - Never commit real database passwords. Use environment variables for shared or production environments.

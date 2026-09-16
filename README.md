@@ -1,6 +1,6 @@
 # Sales Service
 
-Backend cơ bản cho bài tập hệ thống bán hàng trực tuyến. Project mở trực tiếp bằng IntelliJ IDEA và có thể chạy ngay với cơ sở dữ liệu H2 trong bộ nhớ. Khi chạy bằng Docker Compose, ứng dụng sử dụng MySQL 8.4.
+Backend cơ bản cho bài tập hệ thống bán hàng trực tuyến. Project mở trực tiếp bằng IntelliJ IDEA và có thể chạy ngay với H2 hoặc kết nối MySQL đã tạo bằng MySQL Workbench.
 
 ## Chức năng hiện có
 
@@ -8,12 +8,15 @@ Backend cơ bản cho bài tập hệ thống bán hàng trực tuyến. Project
 - Đăng nhập và nhận JWT.
 - `GET /api/users/me` yêu cầu xác thực.
 - Xem danh sách và chi tiết sản phẩm.
-- Admin thêm và xóa sản phẩm.
+- Admin thêm, cập nhật, chỉnh tồn kho và soft delete sản phẩm.
+- Customer tạo đơn hàng, xem danh sách và chi tiết đơn của mình.
+- Tạo đơn và trừ kho trong cùng transaction; hủy đơn sẽ hoàn kho.
+- Admin xem đơn và cập nhật trạng thái đơn.
 - Xác thực tập trung bằng Spring Security filter.
 - Tài liệu Swagger/OpenAPI.
 - Dữ liệu mẫu và tài khoản admin phục vụ demo.
 
-Giỏ hàng và đơn hàng chưa được triển khai trong bản base này.
+Giỏ hàng chưa được triển khai; customer tạo đơn trực tiếp từ danh sách sản phẩm và số lượng.
 
 ## Kiến trúc
 
@@ -53,20 +56,15 @@ Kiểm thử:
 .\mvnw.cmd test
 ```
 
-## Chạy MySQL và API bằng Docker
+## Chạy với MySQL Workbench
 
-Yêu cầu Docker Desktop:
+1. Chạy lần lượt `database/01_schema.sql`, `database/02_seed.sql` và `database/03_create_local_user.sql` trong Workbench. Nếu đã tạo database bằng bản schema cũ, chạy thêm `database/04_upgrade_existing_schema.sql` đúng một lần.
+2. Trong IntelliJ, mở **Run > Edit Configurations**.
+3. Thêm biến môi trường `SPRING_PROFILES_ACTIVE=mysql`.
+4. Nếu không dùng tài khoản mẫu, thêm `DB_USERNAME` và `DB_PASSWORD` của bạn.
+5. Chạy lại `SalesServiceApplication`.
 
-```powershell
-Copy-Item .env.example .env
-docker compose up --build
-```
-
-API chạy tại <http://localhost:8080>. Dừng hệ thống bằng:
-
-```powershell
-docker compose down
-```
+Profile `mysql` mặc định kết nối `jdbc:mysql://localhost:3306/sales_service` với tài khoản `sales_user`. Hibernate dùng `ddl-auto=validate`, nên ứng dụng chỉ kiểm tra schema thay vì tự ý sửa bảng.
 
 ## Tài khoản demo
 
@@ -88,7 +86,14 @@ Không sử dụng tài khoản hoặc JWT secret mặc định khi triển khai
 | GET | `/api/products/{id}` | Công khai |
 | GET | `/api/users/me` | Đã đăng nhập |
 | POST | `/api/products` | ADMIN |
+| PUT | `/api/products/{id}` | ADMIN |
+| PATCH | `/api/products/{id}/stock` | ADMIN |
 | DELETE | `/api/products/{id}` | ADMIN |
+| POST | `/api/orders` | CUSTOMER/ADMIN đã đăng nhập |
+| GET | `/api/orders/me` | Đã đăng nhập |
+| GET | `/api/orders/{id}` | Chủ đơn hàng |
+| GET | `/api/admin/orders` | ADMIN |
+| PATCH | `/api/admin/orders/{id}/status` | ADMIN |
 
 ### Lấy token admin
 
@@ -102,13 +107,27 @@ Content-Type: application/json
 }
 ```
 
-Trong Swagger, nhấn **Authorize** và nhập token JWT. Nếu giao diện yêu cầu cả tiền tố thì nhập `Bearer <token>`.
+Trong Swagger, nhấn **Authorize** và dán trực tiếp giá trị `accessToken` (không thêm chữ `Bearer`).
+
+### JSON tạo đơn mẫu
+
+```json
+{
+  "recipientName": "Nguyễn Văn A",
+  "recipientPhone": "0901234567",
+  "shippingAddress": "123 Đường Mẫu, Hà Nội",
+  "items": [
+    { "productId": 1, "quantity": 2 }
+  ]
+}
+```
 
 ## Cấu hình môi trường
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
-| `DB_URL` | H2 in-memory | JDBC URL; Docker truyền URL MySQL |
+| `SPRING_PROFILES_ACTIVE` | rỗng | Đặt `mysql` để dùng cấu hình MySQL |
+| `DB_URL` | H2 in-memory | JDBC URL; profile MySQL dùng database `sales_service` |
 | `DB_USERNAME` | `sa` | Tài khoản DB |
 | `DB_PASSWORD` | rỗng | Mật khẩu DB |
 | `JWT_SECRET` | secret demo | Khóa Base64 tối thiểu 256 bit |
@@ -117,11 +136,10 @@ Trong Swagger, nhấn **Authorize** và nhập token JWT. Nếu giao diện yêu
 
 ## Phần nên làm tiếp
 
-1. API cập nhật sản phẩm và phân trang/tìm kiếm.
+1. Phân trang và tìm kiếm sản phẩm/đơn hàng.
 2. Giỏ hàng (`carts`, `cart_items`).
-3. Đơn hàng (`orders`, `order_items`) và trừ tồn kho trong transaction.
-4. Flyway migration thay cho `ddl-auto=update`.
-5. Integration test cho xác thực và phân quyền.
+3. Flyway migration thay cho script chạy tay.
+4. Integration test cho xác thực, phân quyền và tranh chấp tồn kho.
 
 ## Thiết kế MySQL
 
@@ -131,4 +149,4 @@ Các script MySQL Workbench nằm trong thư mục [`database`](database/README.
 2. `02_seed.sql`: thêm dữ liệu sản phẩm mẫu.
 3. `03_create_local_user.sql`: tạo tài khoản MySQL phục vụ phát triển cục bộ.
 
-Đọc `database/README.md` trước khi chạy script. Java entity sẽ được đồng bộ với schema này ở bước phát triển tiếp theo.
+Đọc `database/README.md` trước khi chạy script. Java entity và repository đã được đồng bộ với schema này.

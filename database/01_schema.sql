@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS products (
     id BIGINT NOT NULL AUTO_INCREMENT,
     sku VARCHAR(64) NOT NULL,
     name VARCHAR(160) NOT NULL,
-    description TEXT NULL,
+    description VARCHAR(1000) NOT NULL,
     price DECIMAL(15, 2) NOT NULL,
     stock_quantity INT NOT NULL DEFAULT 0,
     status ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS orders (
     order_code VARCHAR(32) NOT NULL,
     user_id BIGINT NOT NULL,
     recipient_name VARCHAR(120) NOT NULL,
-    recipient_phone VARCHAR(20) NOT NULL,
+    recipient_phone VARCHAR(30) NOT NULL,
     shipping_address VARCHAR(500) NOT NULL,
     status ENUM(
         'PENDING',
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS orders (
     CONSTRAINT chk_orders_recipient_name
         CHECK (CHAR_LENGTH(TRIM(recipient_name)) > 0),
     CONSTRAINT chk_orders_recipient_phone
-        CHECK (CHAR_LENGTH(TRIM(recipient_phone)) BETWEEN 8 AND 20),
+        CHECK (CHAR_LENGTH(TRIM(recipient_phone)) BETWEEN 8 AND 30),
     CONSTRAINT chk_orders_shipping_address
         CHECK (CHAR_LENGTH(TRIM(shipping_address)) > 0),
     CONSTRAINT chk_orders_total_amount CHECK (total_amount >= 0),
@@ -93,8 +93,7 @@ CREATE TABLE IF NOT EXISTS order_items (
     product_name VARCHAR(160) NOT NULL,
     unit_price DECIMAL(15, 2) NOT NULL,
     quantity INT NOT NULL,
-    line_total DECIMAL(15, 2)
-        GENERATED ALWAYS AS (unit_price * quantity) STORED,
+    line_total DECIMAL(15, 2) NOT NULL,
 
     CONSTRAINT pk_order_items PRIMARY KEY (id),
     CONSTRAINT uk_order_items_order_product UNIQUE (order_id, product_id),
@@ -110,6 +109,7 @@ CREATE TABLE IF NOT EXISTS order_items (
         CHECK (CHAR_LENGTH(TRIM(product_name)) > 0),
     CONSTRAINT chk_order_items_unit_price CHECK (unit_price > 0),
     CONSTRAINT chk_order_items_quantity CHECK (quantity > 0),
+    CONSTRAINT chk_order_items_line_total CHECK (line_total = unit_price * quantity),
 
     INDEX idx_order_items_product (product_id)
 ) ENGINE = InnoDB;

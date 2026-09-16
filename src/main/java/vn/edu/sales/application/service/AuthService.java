@@ -7,6 +7,7 @@ import vn.edu.sales.domain.exception.BusinessConflictException;
 import vn.edu.sales.domain.exception.InvalidCredentialsException;
 import vn.edu.sales.domain.model.Role;
 import vn.edu.sales.domain.model.User;
+import vn.edu.sales.domain.model.UserStatus;
 
 import java.util.Locale;
 
@@ -21,7 +22,7 @@ public class AuthService {
         this.tokenProvider = tokenProvider;
     }
 
-    public AuthResult register(String email, String rawPassword) {
+    public AuthResult register(String fullName, String email, String rawPassword) {
         String normalizedEmail = normalizeEmail(email);
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new BusinessConflictException("Email đã được sử dụng");
@@ -31,7 +32,10 @@ public class AuthService {
                 null,
                 normalizedEmail,
                 passwordHasher.hash(rawPassword),
-                Role.CUSTOMER
+                fullName.trim(),
+                Role.CUSTOMER,
+                UserStatus.ACTIVE,
+                null
         ));
         return new AuthResult(tokenProvider.generate(user.email(), user.role()), user.email(), user.role());
     }
@@ -41,7 +45,7 @@ public class AuthService {
         User user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new InvalidCredentialsException("Email hoặc mật khẩu không chính xác"));
 
-        if (!passwordHasher.matches(rawPassword, user.passwordHash())) {
+        if (user.status() != UserStatus.ACTIVE || !passwordHasher.matches(rawPassword, user.passwordHash())) {
             throw new InvalidCredentialsException("Email hoặc mật khẩu không chính xác");
         }
 
