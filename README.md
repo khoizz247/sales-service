@@ -122,3 +122,13 @@ Trong Swagger, nhấn **Authorize** và nhập token JWT. Nếu giao diện yêu
 3. Đơn hàng (`orders`, `order_items`) và trừ tồn kho trong transaction.
 4. Flyway migration thay cho `ddl-auto=update`.
 5. Integration test cho xác thực và phân quyền.
+
+## Thiết kế MySQL
+
+Các script MySQL Workbench nằm trong thư mục [`database`](database/README.md):
+
+1. `01_schema.sql`: tạo schema và bốn bảng chính.
+2. `02_seed.sql`: thêm dữ liệu sản phẩm mẫu.
+3. `03_create_local_user.sql`: tạo tài khoản MySQL phục vụ phát triển cục bộ.
+
+Đọc `database/README.md` trước khi chạy script. Java entity sẽ được đồng bộ với schema này ở bước phát triển tiếp theo.
