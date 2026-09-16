@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: sales-service
+  datasource:
+    url: ${DB_URL:jdbc:h2:mem:salesdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    open-in-view: false
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:c2FsZXMtc2VydmljZS1kZXYtc2VjcmV0LWNoYW5nZS1tZS0xMjM0NTY=}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  seed:
+    enabled: ${SEED_ENABLED:true}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

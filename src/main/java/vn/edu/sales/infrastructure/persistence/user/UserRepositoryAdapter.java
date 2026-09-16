@@ -1,0 +1,37 @@
+package vn.edu.sales.infrastructure.persistence.user;
+
+import org.springframework.stereotype.Repository;
+import vn.edu.sales.application.port.out.UserRepository;
+import vn.edu.sales.domain.model.User;
+
+import java.util.Optional;
+
+@Repository
+public class UserRepositoryAdapter implements UserRepository {
+    private final SpringDataUserRepository repository;
+
+    public UserRepositoryAdapter(SpringDataUserRepository repository) {
+        this.repository = repository;
+    }
+
+    @Override
+    public User save(User user) {
+        return toDomain(repository.save(new UserJpaEntity(
+                user.id(), user.email(), user.passwordHash(), user.role()
+        )));
+    }
+
+    @Override
+    public Optional<User> findByEmail(String email) {
+        return repository.findByEmail(email).map(this::toDomain);
+    }
+
+    @Override
+    public boolean existsByEmail(String email) {
+        return repository.existsByEmail(email);
+    }
+
+    private User toDomain(UserJpaEntity entity) {
+        return new User(entity.getId(), entity.getEmail(), entity.getPasswordHash(), entity.getRole());
+    }
+}

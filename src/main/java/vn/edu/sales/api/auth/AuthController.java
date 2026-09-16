@@ -1,0 +1,47 @@
+package vn.edu.sales.api.auth;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import vn.edu.sales.application.service.AuthService;
+import vn.edu.sales.domain.model.Role;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+    private final AuthService authService;
+
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+    @PostMapping("/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    public AuthResponse register(@Valid @RequestBody AuthRequest request) {
+        return AuthResponse.from(authService.register(request.email(), request.password()));
+    }
+
+    @PostMapping("/login")
+    public AuthResponse login(@Valid @RequestBody AuthRequest request) {
+        return AuthResponse.from(authService.login(request.email(), request.password()));
+    }
+
+    public record AuthRequest(
+            @NotBlank @Email String email,
+            @NotBlank @Size(min = 8, max = 72) String password
+    ) {
+    }
+
+    public record AuthResponse(String accessToken, String tokenType, String email, Role role) {
+        static AuthResponse from(AuthService.AuthResult result) {
+            return new AuthResponse(result.accessToken(), "Bearer", result.email(), result.role());
+        }
+    }
+}
