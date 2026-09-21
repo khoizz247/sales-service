@@ -28,20 +28,16 @@ public class OrderItemJpaEntity {
     @Column(nullable = false)
     private int quantity;
 
-    @Column(nullable = false, precision = 15, scale = 2)
-    private BigDecimal lineTotal;
-
     protected OrderItemJpaEntity() {
     }
 
     public OrderItemJpaEntity(Long id, Long productId, String productName, BigDecimal unitPrice,
-                              int quantity, BigDecimal lineTotal) {
+                              int quantity) {
         this.id = id;
         this.productId = productId;
         this.productName = productName;
         this.unitPrice = unitPrice;
         this.quantity = quantity;
-        this.lineTotal = lineTotal;
     }
 
     void attachTo(OrderJpaEntity order) { this.order = order; }
@@ -50,5 +46,5 @@ public class OrderItemJpaEntity {
     public String getProductName() { return productName; }
     public BigDecimal getUnitPrice() { return unitPrice; }
     public int getQuantity() { return quantity; }
-    public BigDecimal getLineTotal() { return lineTotal; }
+    public BigDecimal getLineTotal() { return unitPrice.multiply(BigDecimal.valueOf(quantity)); }
 }

@@ -50,7 +50,7 @@ public class OrderRepositoryAdapter implements OrderRepository {
                 order.recipientName(), order.recipientPhone(), order.shippingAddress(), order.status(),
                 order.totalAmount(), order.createdAt(), order.updatedAt());
         order.items().forEach(item -> entity.addItem(new OrderItemJpaEntity(item.id(), item.productId(),
-                item.productName(), item.unitPrice(), item.quantity(), item.lineTotal())));
+                item.productName(), item.unitPrice(), item.quantity())));
         return entity;
     }
 

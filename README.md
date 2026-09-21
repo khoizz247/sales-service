@@ -58,7 +58,7 @@ Kiểm thử:
 
 ## Chạy với MySQL Workbench
 
-1. Chạy lần lượt `database/01_schema.sql`, `database/02_seed.sql` và `database/03_create_local_user.sql` trong Workbench. Nếu đã tạo database bằng bản schema cũ, chạy thêm `database/04_upgrade_existing_schema.sql` đúng một lần.
+1. Database mới: chạy `database/01_schema.sql`, `database/02_seed.sql`, rồi `database/03_create_local_user.sql`. Database bốn bảng đang dùng: chạy `05_prepare_normalized_upgrade.sql`, chạy lại `01_schema.sql`, rồi `02_seed.sql`.
 2. Trong IntelliJ, mở **Run > Edit Configurations**.
 3. Thêm biến môi trường `SPRING_PROFILES_ACTIVE=mysql`.
 4. Nếu không dùng tài khoản mẫu, thêm `DB_USERNAME` và `DB_PASSWORD` của bạn.
@@ -145,8 +145,10 @@ Trong Swagger, nhấn **Authorize** và dán trực tiếp giá trị `accessTok
 
 Các script MySQL Workbench nằm trong thư mục [`database`](database/README.md):
 
-1. `01_schema.sql`: tạo schema và bốn bảng chính.
-2. `02_seed.sql`: thêm dữ liệu sản phẩm mẫu.
+1. `01_schema.sql`: tạo schema bán hàng chuẩn hóa, các ràng buộc và view kiểm tra.
+2. `02_seed.sql`: thêm danh mục, nhà cung cấp, sản phẩm và số dư kho mẫu.
 3. `03_create_local_user.sql`: tạo tài khoản MySQL phục vụ phát triển cục bộ.
+4. `05_prepare_normalized_upgrade.sql`: chuẩn bị nâng cấp database bốn bảng hiện có.
+5. `NORMALIZATION.md`: ERD, phụ thuộc hàm và chứng minh 1NF/2NF/3NF/BCNF.
 
 Đọc `database/README.md` trước khi chạy script. Java entity và repository đã được đồng bộ với schema này.
