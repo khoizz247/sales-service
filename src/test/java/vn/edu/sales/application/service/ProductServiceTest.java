@@ -6,6 +6,7 @@ import vn.edu.sales.application.port.out.InventoryStore;
 import vn.edu.sales.application.port.out.TransactionRunner;
 import vn.edu.sales.application.port.out.UserRepository;
 import vn.edu.sales.application.port.out.ProductPage;
+import vn.edu.sales.domain.exception.BusinessConflictException;
 import vn.edu.sales.domain.model.Product;
 import vn.edu.sales.domain.model.ProductStatus;
 import vn.edu.sales.domain.model.User;
@@ -18,16 +19,20 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ProductServiceTest {
+
+    private ProductService service(InMemoryProductRepository repository) {
+        return new ProductService(repository, new NoOpInventoryStore(), new TransactionRunner() {
+            @Override public <T> T execute(java.util.function.Supplier<T> work) { return work.get(); }
+        }, new InMemoryAdminRepository());
+    }
 
     @Test
     void createsAValidProductWithoutDependingOnSpringOrJpa() {
         InMemoryProductRepository repository = new InMemoryProductRepository();
-        ProductService service = new ProductService(repository, new NoOpInventoryStore(),
-                new TransactionRunner() {
-                    @Override public <T> T execute(java.util.function.Supplier<T> work) { return work.get(); }
-                }, new InMemoryAdminRepository());
+        ProductService service = service(repository);
 
         Product product = service.create("admin@example.com", "sku-001", "  Sản phẩm A  ", "Mô tả", new BigDecimal("120000"), 5);
 
@@ -35,6 +40,23 @@ class ProductServiceTest {
         assertThat(product.name()).isEqualTo("Sản phẩm A");
         assertThat(product.sku()).isEqualTo("SKU-001");
         assertThat(product.status()).isEqualTo(ProductStatus.ACTIVE);
+    }
+
+    @Test
+    void rejectsDuplicateSkuAfterNormalization() {
+        ProductService service = service(new InMemoryProductRepository());
+        service.create("admin@example.com", "sku-001", "Sản phẩm A", "", new BigDecimal("100"), 1);
+
+        assertThatThrownBy(() -> service.create("admin@example.com", " SKU-001 ", "Sản phẩm B", "",
+                new BigDecimal("100"), 1)).isInstanceOf(BusinessConflictException.class);
+    }
+
+    @Test
+    void rejectsInvalidSearchPagination() {
+        ProductService service = service(new InMemoryProductRepository());
+
+        assertThatThrownBy(() -> service.search("a", -1, 20)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.search("a", 0, 101)).isInstanceOf(IllegalArgumentException.class);
     }
 
     private static class InMemoryAdminRepository implements UserRepository {

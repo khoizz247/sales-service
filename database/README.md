@@ -29,6 +29,8 @@ this version of the app. Never edit an applied migration; add a new version.
 
 ## Legacy manual setup with MySQL Workbench
 
+**Chỉ dùng các bước dưới đây để khôi phục/nâng cấp database cũ, không dùng cho cài đặt mới.** Với database rỗng, chỉ tạo schema `sales_service` và tài khoản DB; ứng dụng sẽ chạy Flyway tự động. Không trộn script thủ công với lịch sử Flyway đã áp dụng.
+
 1. Start **MySQL Server** on Windows.
 2. Open **MySQL Workbench** and connect as a MySQL administrator.
 3. Select **File > Open SQL Script**.
@@ -109,6 +111,5 @@ After creating the database:
 - `line_total` is not stored; it is calculated from the snapshot price and quantity.
 - Product deletion is represented by `status = 'INACTIVE'`; do not physically delete products referenced by orders.
 - Creating an order, inserting its items, and subtracting stock must happen in one transaction in the application.
-- New catalog, payment, staff and inventory-history tables are ready for later APIs; the current API continues to use the compatible core tables.
-- Run the application with `SPRING_PROFILES_ACTIVE=mysql` after executing the scripts.
+- API hiện tại đã dùng các bảng catalog, payment, staff, inventory-history, cart và audit. Với database mới, chạy ứng dụng bằng `SPRING_PROFILES_ACTIVE=mysql` để Flyway tạo/nâng toàn bộ schema.
 - Never commit real database passwords. Use environment variables for shared or production environments.

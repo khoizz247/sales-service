@@ -72,8 +72,11 @@ class SalesApiIntegrationTest {
         assertThat(movements.get(1).path("type").asText()).isEqualTo("ADJUSTMENT_OUT");
         assertThat(movements.get(0).path("actorUserId").asLong()).isEqualTo(actorId);
         assertThat(movements.get(1).path("actorUserId").asLong()).isEqualTo(actorId);
+        mvc.perform(delete("/api/products/{id}", id)).andExpect(status().isUnauthorized());
         mvc.perform(withToken(delete("/api/products/{id}", id), admin)).andExpect(status().isNoContent());
         mvc.perform(get("/api/products/{id}", id)).andExpect(status().isNotFound());
+        assertThat(jdbc.queryForObject("SELECT status FROM products WHERE id=?", String.class, id))
+                .isEqualTo("INACTIVE");
     }
 
     @Test
@@ -475,6 +478,131 @@ class SalesApiIntegrationTest {
                 .andExpect(status().isCreated()));
         changePaymentStatus(admin, first.path("id").asLong(), "PAID").andExpect(status().isOk());
         changePaymentStatus(admin, second.path("id").asLong(), "PAID").andExpect(status().isConflict());
+    }
+
+    @Test
+    void catalogOrganizationAndInventoryCrudEndpointsWork() throws Exception {
+        String admin = adminToken();
+        String customer = customerToken();
+        long productId = createProduct(admin, 5, "100.00").path("id").asLong();
+        long customerId = response(mvc.perform(withToken(get("/api/users/me"), customer))
+                .andExpect(status().isOk())).path("id").asLong();
+        mvc.perform(get("/api/products")).andExpect(status().isOk());
+        mvc.perform(withToken(get("/api/admin/customers"), admin)).andExpect(status().isOk());
+        mvc.perform(withToken(get("/api/admin/customers/{id}/profile", customerId), admin))
+                .andExpect(status().isOk());
+
+        JsonNode office = response(mvc.perform(withToken(post("/api/admin/offices"), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                        "officeCode", unique("OFF"), "name", "Văn phòng thử", "phone", "0901234567",
+                        "addressLine1", "1 Hà Nội", "city", "Hà Nội", "countryCode", "VN"))))
+                .andExpect(status().isCreated()));
+        long officeId = office.path("id").asLong();
+        mvc.perform(withToken(get("/api/admin/offices"), admin)).andExpect(status().isOk());
+        mvc.perform(withToken(get("/api/admin/offices/{id}", officeId), admin)).andExpect(status().isOk());
+        mvc.perform(withToken(put("/api/admin/offices/{id}", officeId), admin)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Văn phòng sửa\"," +
+                        "\"phone\":\"0901234567\",\"addressLine1\":\"1 Hà Nội\"," +
+                        "\"city\":\"Hà Nội\",\"countryCode\":\"VN\",\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isOk());
+        long adminId = response(mvc.perform(withToken(post("/api/admin/employee-accounts"), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                        "currentPassword", "Admin@123", "fullName", "Nhân viên thử",
+                        "email", unique("staff") + "@example.com", "password", "Strong@Pass123",
+                        "employeeCode", unique("EMP"), "officeId", officeId,
+                        "jobTitle", "Quản trị", "hireDate", "2024-01-01"))))
+                .andExpect(status().isCreated())).path("userId").asLong();
+        mvc.perform(withToken(get("/api/admin/employees"), admin)).andExpect(status().isOk());
+        mvc.perform(withToken(get("/api/admin/employees/{id}", adminId), admin)).andExpect(status().isOk());
+        mvc.perform(withToken(put("/api/admin/employees/{id}", adminId), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                        "officeId", officeId, "jobTitle", "Quản lý", "hireDate", "2024-01-01",
+                        "status", "ACTIVE")))).andExpect(status().isOk());
+
+        JsonNode category = response(mvc.perform(withToken(post("/api/admin/categories"), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                        "code", unique("CAT"), "name", unique("Danh mục")))))
+                .andExpect(status().isCreated()));
+        long categoryId = category.path("id").asLong();
+        mvc.perform(get("/api/categories")).andExpect(status().isOk());
+        mvc.perform(get("/api/categories/{id}", categoryId)).andExpect(status().isOk());
+        mvc.perform(withToken(put("/api/admin/categories/{id}", categoryId), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                        "name", unique("Danh mục đã sửa"), "description", "Mô tả", "status", "ACTIVE"))))
+                .andExpect(status().isOk());
+        mvc.perform(withToken(post("/api/admin/products/{p}/categories/{c}", productId, categoryId), admin))
+                .andExpect(status().isNoContent());
+        mvc.perform(withToken(delete("/api/admin/products/{p}/categories/{c}", productId, categoryId), admin))
+                .andExpect(status().isNoContent());
+
+        JsonNode supplier = response(mvc.perform(withToken(post("/api/admin/suppliers"), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                        "code", unique("SUP"), "name", "Nhà cung cấp"))))
+                .andExpect(status().isCreated()));
+        long supplierId = supplier.path("id").asLong();
+        mvc.perform(withToken(get("/api/suppliers"), admin)).andExpect(status().isOk());
+        mvc.perform(withToken(get("/api/suppliers/{id}", supplierId), admin)).andExpect(status().isOk());
+        mvc.perform(withToken(put("/api/admin/suppliers/{id}", supplierId), admin)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Nhà cung cấp sửa\"," +
+                        "\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(withToken(put("/api/admin/products/{p}/suppliers/{s}", productId, supplierId), admin)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"purchasePrice\":50,\"leadTimeDays\":2,\"preferred\":true}"))
+                .andExpect(status().isNoContent());
+        mvc.perform(withToken(delete("/api/admin/products/{p}/suppliers/{s}", productId, supplierId), admin))
+                .andExpect(status().isNoContent());
+
+        JsonNode adjustment = response(mvc.perform(withToken(
+                post("/api/admin/products/{id}/inventory/adjustments", productId), admin)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"quantityChange\":2,\"note\":\"Kiểm kho\"}"))
+                .andExpect(status().isCreated()));
+        assertThat(adjustment.path("type").asText()).isEqualTo("ADJUSTMENT_IN");
+        assertThat(stock(productId)).isEqualTo(7);
+    }
+
+    @Test
+    void remainingCartAddressOrderAndPaymentRoutesWork() throws Exception {
+        String admin = adminToken();
+        String customer = customerToken();
+        long productId = createProduct(admin, 5, "100.00").path("id").asLong();
+        String addressBody = "{\"label\":\"Nhà\",\"recipientName\":\"Khách thử\"," +
+                "\"recipientPhone\":\"0901234567\",\"addressLine1\":\"1 Hà Nội\"," +
+                "\"city\":\"Hà Nội\",\"countryCode\":\"VN\",\"isDefault\":true}";
+        long addressId = response(mvc.perform(withToken(post("/api/users/me/addresses"), customer)
+                .contentType(MediaType.APPLICATION_JSON).content(addressBody))
+                .andExpect(status().isCreated())).path("id").asLong();
+        mvc.perform(withToken(put("/api/users/me/addresses/{id}", addressId), customer)
+                .contentType(MediaType.APPLICATION_JSON).content(addressBody.replace("Khách thử", "Khách sửa")))
+                .andExpect(status().isOk());
+
+        mvc.perform(withToken(put("/api/cart/items/{id}", productId), customer)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}"))
+                .andExpect(status().isOk());
+        mvc.perform(withToken(delete("/api/cart/items/{id}", productId), customer))
+                .andExpect(status().isNoContent());
+        mvc.perform(withToken(put("/api/cart/items/{id}", productId), customer)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}"))
+                .andExpect(status().isOk());
+        mvc.perform(withToken(delete("/api/cart"), customer)).andExpect(status().isNoContent());
+        assertThat(response(mvc.perform(withToken(get("/api/cart"), customer))
+                .andExpect(status().isOk())).size()).isZero();
+
+        long orderId = createOrder(customer, productId, 1).path("id").asLong();
+        mvc.perform(withToken(get("/api/orders/me"), customer)).andExpect(status().isOk());
+        mvc.perform(withToken(get("/api/admin/orders"), admin)).andExpect(status().isOk());
+        mvc.perform(withToken(get("/api/orders/{id}/history", orderId), customer))
+                .andExpect(status().isOk());
+        mvc.perform(withToken(get("/api/admin/orders/{id}/history", orderId), admin))
+                .andExpect(status().isOk());
+        mvc.perform(withToken(get("/api/orders/{id}/payments", orderId), customer))
+                .andExpect(status().isOk());
+        mvc.perform(withToken(get("/api/admin/orders/{id}/payments", orderId), admin))
+                .andExpect(status().isOk());
+        changeOrderStatus(admin, orderId, "CONFIRMED").andExpect(status().isOk());
+        changeOrderStatus(admin, orderId, "SHIPPING").andExpect(status().isOk());
+        changeOrderStatus(admin, orderId, "COMPLETED").andExpect(status().isOk());
+        changeOrderStatus(admin, orderId, "CANCELLED").andExpect(status().isConflict());
     }
 
     private String adminToken() throws Exception {

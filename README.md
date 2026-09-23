@@ -43,6 +43,8 @@ domain/model (Java thuần)
 
 Các package `domain` và `application` không phụ thuộc Spring Web hoặc JPA.
 
+Xem [ERD bốn bảng lõi, kiến trúc và luồng trạng thái đơn hàng](docs/CORE_DESIGN.md). ERD toàn bộ schema và phân tích 1NF/2NF/3NF/BCNF nằm ở [database/NORMALIZATION.md](database/NORMALIZATION.md).
+
 ## Chạy bằng IntelliJ IDEA
 
 1. Chọn **File > Open** và mở thư mục `sales-service`.
@@ -88,6 +90,20 @@ curl.exe http://localhost:8080/api/products
 Kết quả mong đợi: cả `mysql` và `api` là `healthy`, Flyway có các version 1-3 và API trả danh sách sản phẩm JSON. Swagger ở <http://localhost:8080/swagger-ui.html>. Để dừng, nhấn `Ctrl+C` ở Terminal chạy `up`; dữ liệu trong Docker volume vẫn được giữ lại.
 
 Docker dùng duy nhất schema `sales_service`: MySQL tạo database, sau đó API chạy Flyway `V1` (15 bảng, 2 view, 3 trigger), `V2` (dữ liệu mẫu) và `V3` (giỏ hàng và nhật ký cấp tài khoản). API chỉ dùng `ddl-auto=validate`, không để Hibernate tự tạo/sửa bảng. MySQL trong container dùng cổng 3306, từ Windows kết nối qua **localhost:3307**. Nếu cổng 8080 hoặc 3307 đã bận, đặt `API_HOST_PORT` hoặc `MYSQL_HOST_PORT` trong file `.env` cục bộ (Git bỏ qua).
+
+Để kiểm tra **khởi tạo từ database hoàn toàn rỗng** mà không đụng tới volume `sales-service` hiện có, mở một PowerShell mới tại thư mục project và chạy stack độc lập:
+
+```powershell
+$env:API_HOST_PORT = '18081'
+$env:MYSQL_HOST_PORT = '3308'
+docker compose -p sales-service-fresh up --build -d
+docker compose -p sales-service-fresh ps
+docker compose -p sales-service-fresh exec mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" mysql -u"$MYSQL_USER" sales_service -e "SELECT version,success FROM flyway_schema_history ORDER BY installed_rank; SHOW TABLES"'
+curl.exe http://localhost:18081/api/products
+docker compose -p sales-service-fresh down
+```
+
+Mong đợi cả hai container `healthy`, Flyway có V1–V3 thành công và 17 bảng nghiệp vụ (15 bảng ở V1, thêm 2 bảng ở V3); `SHOW TABLES` còn hiển thị thêm bảng nội bộ `flyway_schema_history`, tổng cộng 18. `down` không có `-v`, nên volume kiểm thử vẫn được giữ lại; không dùng `down -v` cho dữ liệu cần giữ.
 
 Với volume cũ đã có schema chuẩn 15 bảng, Flyway tạo bản ghi baseline version 1 rồi chạy `V2` và `V3`; **sao lưu DB trước lần nâng cấp đầu tiên**. Nếu volume có schema khác hoặc chưa hoàn chỉnh, hãy nâng cấp schema cũ trước; không dùng baseline tự động để che lỗi. Không chạy `docker compose down -v` nếu còn dữ liệu cần giữ. Các migration đã áp dụng không được sửa nội dung; thay đổi mới phải là file `V4__...sql` trở đi.
 
@@ -182,6 +198,8 @@ Thanh toán chỉ là **ghi nhận thủ công**, chưa kết nối cổng thanh
 
 Hồ sơ nhân viên chỉ gắn với tài khoản `ADMIN`; endpoint cấp tài khoản mới tạo user và hồ sơ trong cùng transaction. Đăng ký công khai chỉ tạo `CUSTOMER`. Xem [hướng dẫn thử API bằng Swagger](docs/SWAGGER_TEST_GUIDE.md).
 
+[Bảng tham chiếu tất cả endpoint và JSON mẫu](docs/API_EXAMPLES.md) ghi rõ method, quyền, body và mã phản hồi mong đợi. Các endpoint GET/DELETE không nhận JSON body.
+
 ### Lấy token admin
 
 ```http
@@ -223,7 +241,9 @@ Trong Swagger, nhấn **Authorize** và dán trực tiếp giá trị `accessTok
 
 ## Kiểm thử tự động
 
-Chạy bộ JUnit/MockMvc bằng `mvnw.cmd test` (Windows), `./mvnw test` (macOS/Linux), hoặc chọn Maven → Lifecycle → `test` trong IntelliJ. Các test dùng profile `test` và H2 riêng, không kết nối MySQL của thành viên trong nhóm. Bộ test bao phủ phân quyền `CUSTOMER`/`ADMIN`, JWT `401`/`403`, quản lý sản phẩm, tồn kho khi đặt/hủy đơn, hủy lặp, chuyển trạng thái `409`, tổng tiền và các API hồ sơ, địa chỉ, văn phòng, nhân viên, danh mục, nhà cung cấp, thanh toán. Xem [SalesApiIntegrationTest.java](src/test/java/vn/edu/sales/SalesApiIntegrationTest.java).
+Chạy bộ JUnit/MockMvc bằng `mvnw.cmd test` (Windows), `./mvnw test` (macOS/Linux), hoặc chọn Maven → Lifecycle → `test` trong IntelliJ. Các test dùng profile `test` và H2 riêng, không kết nối MySQL của thành viên trong nhóm. Unit test kiểm tra `ProductService`, `AuthService`, `OrderService`; integration test kiểm tra phân quyền `CUSTOMER`/`ADMIN`, JWT `401`/`403`, quản lý sản phẩm, tồn kho khi đặt/hủy đơn, hủy lặp, chuyển trạng thái `409`, tổng tiền và các API hồ sơ, địa chỉ, văn phòng, nhân viên, danh mục, nhà cung cấp, thanh toán. Xem [src/test/java/vn/edu/sales](src/test/java/vn/edu/sales).
+
+Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) chạy lại JUnit và dựng Docker Compose trên database rỗng khi push/pull request tới `main`.
 
 Có thể chạy thêm smoke test HTTP bằng [scripts/test-api.ps1](scripts/test-api.ps1) trên một phiên H2 **dành riêng cho test**:
 
@@ -235,21 +255,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-api.ps1 -Base
 
 Script HTTP tạo sản phẩm, khách hàng và đơn hàng để kiểm tra các luồng cốt lõi; không chạy nó trên MySQL chứa dữ liệu thật.
 
-## Phần nên làm tiếp
+## Giới hạn hiện tại
 
-1. Cấp tài khoản `ADMIN` mới qua một quy trình an toàn để tạo nhiều nhân viên; hiện chỉ có tài khoản admin mẫu hoặc tài khoản thêm sẵn trong DB.
-2. Bổ sung `created_by_user_id` cho biến động kho phát sinh từ API sản phẩm cũ (hiện trường này là `NULL`).
-3. Phân trang/tìm kiếm, giỏ hàng và Flyway migration thay cho script chạy tay.
-4. Mở rộng integration test cho nhiều yêu cầu đồng thời trên cùng sản phẩm và các nhánh lỗi ít gặp.
+- Thanh toán chỉ được ghi nhận thủ công, không tích hợp nhà cung cấp thanh toán thật.
+- Giỏ hàng không giữ chỗ tồn kho; lúc checkout vẫn phải kiểm tra lại.
+- H2 không có trigger lịch sử trạng thái; kiểm tra lịch sử đầy đủ trên MySQL.
+- Docker Compose dùng mật khẩu/secret mặc định chỉ để phát triển cục bộ; phải cấu hình `.env` riêng trước khi triển khai vào môi trường chia sẻ.
 
 ## Thiết kế MySQL
 
-Các script MySQL Workbench nằm trong thư mục [`database`](database/README.md):
+Các script MySQL Workbench **tham chiếu/khôi phục database cũ** nằm trong thư mục [`database`](database/README.md). Database mới dùng Flyway trong `src/main/resources/db/migration`:
 
 1. `01_schema.sql`: tạo schema bán hàng chuẩn hóa, các ràng buộc và view kiểm tra.
 2. `02_seed.sql`: thêm danh mục, nhà cung cấp, sản phẩm và số dư kho mẫu.
 3. `03_create_local_user.sql`: tạo tài khoản MySQL phục vụ phát triển cục bộ.
 4. `05_prepare_normalized_upgrade.sql`: chuẩn bị nâng cấp database bốn bảng hiện có.
-5. `NORMALIZATION.md`: ERD, phụ thuộc hàm và chứng minh 1NF/2NF/3NF/BCNF.
+5. `NORMALIZATION.md`: ERD mở rộng, phụ thuộc hàm và phân tích 1NF/2NF/3NF/BCNF.
 
 Đọc `database/README.md` trước khi chạy script. Bốn bảng lõi dùng JPA; các bảng mở rộng đang có API dùng JDBC qua cổng dữ liệu ở tầng application.

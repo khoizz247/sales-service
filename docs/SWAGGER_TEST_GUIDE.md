@@ -2,7 +2,7 @@
 
 ## 1. Khởi động và đăng nhập admin
 
-1. Mở project `sales-service` bằng IntelliJ và chạy `SalesServiceApplication`. Để dùng MySQL, chọn Run > Edit Configurations và đặt `SPRING_PROFILES_ACTIVE=mysql`; đảm bảo database đã chạy `database/01_schema.sql`.
+1. Mở project `sales-service` bằng IntelliJ và chạy `SalesServiceApplication`. Để dùng MySQL, chọn Run > Edit Configurations và đặt `SPRING_PROFILES_ACTIVE=mysql`; tạo database rỗng `sales_service`, để Flyway tự chạy migration. **Không chạy `database/01_schema.sql` trên database mới.** Với database cũ, sao lưu trước và đọc `database/README.md`.
 2. Mở <http://localhost:8080/swagger-ui.html>. Nếu đã dùng cổng khác, thay `8080` cho đúng.
 3. Mở `POST /api/auth/login` > **Try it out**, nhập:
 
@@ -13,7 +13,7 @@
 4. Bấm **Execute**, sao chép `accessToken` trong response. Bấm **Authorize** ở đầu Swagger, dán **chỉ token**, không gõ thêm `Bearer`, rồi bấm Authorize và Close.
 5. Thử `GET /api/users/me`. Response có `id`, `email`, `fullName`, `roles`. Ghi lại `id` admin để tạo hồ sơ nhân viên.
 
-> Mật khẩu trên là tài khoản demo. Nếu nhóm đã đổi mật khẩu trong MySQL, dùng mật khẩu mới. Trên H2 dữ liệu sẽ mất mỗi lần dừng app; trên MySQL dữ liệu được giữ lại. Các mã `officeCode`, `employeeCode`, `sku` phải duy nhất; khi thử lại trên MySQL hãy chọn mã mới.
+> Tài khoản demo trên chỉ tự tạo ở H2. MySQL mới cần bootstrap ADMIN đầu tiên qua `BOOTSTRAP_ADMIN_EMAIL` và `BOOTSTRAP_ADMIN_PASSWORD` như README; nếu dùng MySQL cũ thì đăng nhập bằng tài khoản đã có. Trên H2 dữ liệu sẽ mất mỗi lần dừng app; trên MySQL dữ liệu được giữ lại. Các mã `officeCode`, `employeeCode`, `sku` phải duy nhất; khi thử lại trên MySQL hãy chọn mã mới.
 
 ## 2. Văn phòng (`offices`) — token ADMIN
 
