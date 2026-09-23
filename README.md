@@ -91,6 +91,8 @@ Kết quả mong đợi: cả `mysql` và `api` là `healthy`, Flyway có các v
 
 Docker dùng duy nhất schema `sales_service`: MySQL tạo database, sau đó API chạy Flyway `V1` (15 bảng, 2 view, 3 trigger), `V2` (dữ liệu mẫu) và `V3` (giỏ hàng và nhật ký cấp tài khoản). API chỉ dùng `ddl-auto=validate`, không để Hibernate tự tạo/sửa bảng. MySQL trong container dùng cổng 3306, từ Windows kết nối qua **localhost:3307**. Nếu cổng 8080 hoặc 3307 đã bận, đặt `API_HOST_PORT` hoặc `MYSQL_HOST_PORT` trong file `.env` cục bộ (Git bỏ qua).
 
+MySQL 8.4 bật binary log mặc định; tài khoản `sales_user` không có quyền `SUPER` nên không thể tạo trigger trong `V1` nếu giữ nguyên cấu hình. Compose dành cho phát triển/CI đặt `log_bin_trust_function_creators=1` để Flyway tạo trigger mà không cấp `SUPER` cho ứng dụng. Cấu hình này nới lỏng kiểm tra an toàn của MySQL; khi triển khai production, dùng tài khoản migration do DBA quản lý và giữ cấu hình MySQL mặc định. Không dùng Compose mẫu này như cấu hình production nguyên trạng.
+
 Để kiểm tra **khởi tạo từ database hoàn toàn rỗng** mà không đụng tới volume `sales-service` hiện có, mở một PowerShell mới tại thư mục project và chạy stack độc lập:
 
 ```powershell

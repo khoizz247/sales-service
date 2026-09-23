@@ -1,6 +1,9 @@
 services:
   mysql:
     image: mysql:8.4
+    # Local development/CI: Flyway creates triggers with a non-SUPER database user.
+    # For production, keep MySQL's default and run migrations with a DBA-managed account.
+    command: ["--log-bin-trust-function-creators=1"]
     environment:
       MYSQL_DATABASE: sales_service
       MYSQL_USER: ${MYSQL_USER:-sales_user}
