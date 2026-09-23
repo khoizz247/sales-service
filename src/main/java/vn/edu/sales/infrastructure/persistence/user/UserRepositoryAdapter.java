@@ -36,6 +36,14 @@ public class UserRepositoryAdapter implements UserRepository {
         return repository.existsByEmail(email);
     }
 
+    @Override
+    public long count() { return repository.count(); }
+
+    @Override
+    public void updatePassword(Long id, String passwordHash) {
+        repository.updatePassword(id, passwordHash);
+    }
+
     private User toDomain(UserJpaEntity entity) {
         return new User(entity.getId(), entity.getEmail(), entity.getPasswordHash(), entity.getFullName(),
                 entity.getRole(), entity.getStatus(), entity.getCreatedAt());

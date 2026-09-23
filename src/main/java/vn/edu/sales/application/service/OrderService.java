@@ -6,6 +6,7 @@ import vn.edu.sales.application.port.out.PaymentStore;
 import vn.edu.sales.application.port.out.ProductRepository;
 import vn.edu.sales.application.port.out.TransactionRunner;
 import vn.edu.sales.application.port.out.UserRepository;
+import vn.edu.sales.application.port.out.OrderSearchStore;
 import vn.edu.sales.domain.exception.BusinessConflictException;
 import vn.edu.sales.domain.exception.ResourceNotFoundException;
 import vn.edu.sales.domain.model.*;
@@ -22,16 +23,18 @@ public class OrderService {
     private final TransactionRunner transactionRunner;
     private final InventoryStore inventory;
     private final PaymentStore payments;
+    private final OrderSearchStore searchStore;
 
     public OrderService(OrderRepository orderRepository, ProductRepository productRepository,
                         UserRepository userRepository, TransactionRunner transactionRunner, InventoryStore inventory,
-                        PaymentStore payments) {
+                        PaymentStore payments, OrderSearchStore searchStore) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.userRepository = userRepository;
         this.transactionRunner = transactionRunner;
         this.inventory = inventory;
         this.payments = payments;
+        this.searchStore = searchStore;
     }
 
     public Order create(String customerEmail, String recipientName, String recipientPhone,
@@ -88,6 +91,27 @@ public class OrderService {
     public List<Order> getAll(OrderStatus status) {
         return orderRepository.findAll(status);
     }
+
+    public OrderPage searchMine(String email, OrderStatus status, String code, int page, int size) {
+        return search(activeUser(email).id(), status, code, page, size);
+    }
+
+    public OrderPage searchAll(OrderStatus status, String code, int page, int size) {
+        return search(null, status, code, page, size);
+    }
+
+    private OrderPage search(Long userId, OrderStatus status, String code, int page, int size) {
+        if (page < 0 || size < 1 || size > 100)
+            throw new IllegalArgumentException("page phải >= 0 và size trong khoảng 1-100");
+        String normalizedCode = code == null ? "" : code.trim().toUpperCase(Locale.ROOT);
+        if (normalizedCode.length() > 32) throw new IllegalArgumentException("Mã đơn hàng quá dài");
+        OrderSearchStore.Result result = searchStore.search(userId, status, normalizedCode, page, size);
+        List<Order> items = result.orderIds().stream().map(id -> orderRepository.findById(id).orElseThrow()).toList();
+        int totalPages = (int) ((result.totalElements() + size - 1) / size);
+        return new OrderPage(items, page, size, result.totalElements(), totalPages);
+    }
+
+    public record OrderPage(List<Order> items, int page, int size, long totalElements, int totalPages) {}
 
     public Order changeStatus(Long id, OrderStatus nextStatus) {
         return transactionRunner.execute(() -> {

@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,8 +17,10 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import vn.edu.sales.application.service.ProductService;
+import vn.edu.sales.application.port.out.ProductPage;
 import vn.edu.sales.domain.model.Product;
 
 import java.math.BigDecimal;
@@ -37,6 +40,18 @@ public class ProductController {
         return productService.getAllActive().stream().map(ProductResponse::from).toList();
     }
 
+    @GetMapping("/search")
+    public PagedProducts search(@RequestParam(defaultValue = "") String q,
+                                @RequestParam(defaultValue = "0") int page,
+                                @RequestParam(defaultValue = "20") int size) {
+        ProductPage result = productService.search(q, page, size);
+        return new PagedProducts(result.items().stream().map(ProductResponse::from).toList(),
+                result.page(), result.size(), result.totalElements(), result.totalPages());
+    }
+
+    public record PagedProducts(List<ProductResponse> items, int page, int size,
+                                long totalElements, int totalPages) {}
+
     @GetMapping("/{id}")
     public ProductResponse getById(@PathVariable Long id) {
         return ProductResponse.from(productService.getById(id));
@@ -44,21 +59,21 @@ public class ProductController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ProductResponse create(@Valid @RequestBody CreateProductRequest request) {
+    public ProductResponse create(Authentication authentication, @Valid @RequestBody CreateProductRequest request) {
         return ProductResponse.from(productService.create(
-                request.sku(), request.name(), request.description(), request.price(), request.stockQuantity()
+                authentication.getName(), request.sku(), request.name(), request.description(), request.price(), request.stockQuantity()
         ));
     }
 
     @PutMapping("/{id}")
-    public ProductResponse update(@PathVariable Long id, @Valid @RequestBody UpdateProductRequest request) {
-        return ProductResponse.from(productService.update(id, request.name(), request.description(),
+    public ProductResponse update(Authentication authentication, @PathVariable Long id, @Valid @RequestBody UpdateProductRequest request) {
+        return ProductResponse.from(productService.update(authentication.getName(), id, request.name(), request.description(),
                 request.price(), request.stockQuantity()));
     }
 
     @PatchMapping("/{id}/stock")
-    public ProductResponse updateStock(@PathVariable Long id, @Valid @RequestBody UpdateStockRequest request) {
-        return ProductResponse.from(productService.updateStock(id, request.stockQuantity()));
+    public ProductResponse updateStock(Authentication authentication, @PathVariable Long id, @Valid @RequestBody UpdateStockRequest request) {
+        return ProductResponse.from(productService.updateStock(authentication.getName(), id, request.stockQuantity()));
     }
 
     @DeleteMapping("/{id}")

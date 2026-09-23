@@ -2,6 +2,7 @@
 *.iml
 .env
 target/
+/work/
 /out/
 *.log
 .DS_Store

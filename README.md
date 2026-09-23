@@ -5,11 +5,16 @@ Backend cơ bản cho bài tập hệ thống bán hàng trực tuyến. Project
 ## Chức năng hiện có
 
 - Đăng ký tài khoản `CUSTOMER`.
+- ADMIN tạo tài khoản ADMIN mới kèm hồ sơ nhân viên, cần nhập lại mật khẩu quản trị.
+- Người dùng đã đăng nhập có thể đổi mật khẩu tại `POST /api/users/me/password`.
 - Đăng nhập và nhận JWT.
 - `GET /api/users/me` yêu cầu xác thực.
 - Xem danh sách và chi tiết sản phẩm.
+- Tìm kiếm sản phẩm có phân trang tại `GET /api/products/search?q=&page=0&size=20`.
+- Tìm đơn có phân trang theo mã/trạng thái cho admin và khách hàng.
 - Admin thêm, cập nhật, chỉnh tồn kho và soft delete sản phẩm.
 - Customer tạo đơn hàng, xem danh sách và chi tiết đơn của mình.
+- Customer quản lý giỏ hàng và checkout; giá và tồn kho được kiểm tra lại khi checkout.
 - Tạo đơn và trừ kho trong cùng transaction; hủy đơn sẽ hoàn kho.
 - Admin xem đơn và cập nhật trạng thái đơn.
 - Danh mục sản phẩm, nhà cung cấp và liên kết sản phẩm–danh mục/nhà cung cấp.
@@ -18,9 +23,10 @@ Backend cơ bản cho bài tập hệ thống bán hàng trực tuyến. Project
 - Admin ghi nhận thanh toán thủ công, điều chỉnh kho và xem nhật ký kho; customer xem thanh toán, lịch sử trạng thái đơn của mình.
 - Xác thực tập trung bằng Spring Security filter.
 - Tài liệu Swagger/OpenAPI.
-- Dữ liệu mẫu và tài khoản admin phục vụ demo.
+- Flyway tự quản lý migration MySQL, Hibernate chỉ `validate` schema.
+- H2 có tài khoản admin mẫu phục vụ demo; MySQL chỉ bootstrap admin đầu tiên khi khai báo biến môi trường.
 
-Giỏ hàng chưa được triển khai; customer tạo đơn trực tiếp từ danh sách sản phẩm và số lượng.
+API tạo đơn trực tiếp vẫn giữ nguyên để tương thích. Giỏ hàng không giữ chỗ tồn kho; nếu tồn kho thay đổi trước checkout, API trả `409` và giỏ hàng vẫn được giữ lại.
 
 ## Kiến trúc
 
@@ -75,26 +81,29 @@ Mở một Terminal khác để xác minh:
 ```powershell
 docker compose ps
 docker compose exec mysql sh /usr/local/bin/mysql-healthcheck.sh
+docker compose exec mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" mysql -u"$MYSQL_USER" sales_service -e "SELECT installed_rank,version,description,success FROM flyway_schema_history ORDER BY installed_rank"'
 curl.exe http://localhost:8080/api/products
 ```
 
-Kết quả mong đợi: cả `mysql` và `api` là `healthy`, lệnh kiểm tra MySQL thoát với mã 0 và API trả danh sách sản phẩm JSON. Swagger ở <http://localhost:8080/swagger-ui.html>. Để dừng, nhấn `Ctrl+C` ở Terminal chạy `up`; dữ liệu trong Docker volume vẫn được giữ lại.
+Kết quả mong đợi: cả `mysql` và `api` là `healthy`, Flyway có các version 1-3 và API trả danh sách sản phẩm JSON. Swagger ở <http://localhost:8080/swagger-ui.html>. Để dừng, nhấn `Ctrl+C` ở Terminal chạy `up`; dữ liệu trong Docker volume vẫn được giữ lại.
 
-Docker dùng duy nhất schema `sales_service`: MySQL chạy `database/01_schema.sql` và `database/02_seed.sql` khi **volume còn trống**; healthcheck kiểm tra 15 bảng, 2 view và 3 trigger. API chờ MySQL khỏe rồi mới chạy, dùng `ddl-auto=validate` để kiểm tra mapping chứ không tự tạo/sửa bảng. MySQL trong container dùng cổng 3306, còn từ máy Windows kết nối qua **localhost:3307** để tránh đụng MySQL cài sẵn trên cổng 3306. Nếu cổng 8080 hoặc 3307 đã bận, đặt `API_HOST_PORT` hoặc `MYSQL_HOST_PORT` trong file `.env` cục bộ (file này được Git bỏ qua).
+Docker dùng duy nhất schema `sales_service`: MySQL tạo database, sau đó API chạy Flyway `V1` (15 bảng, 2 view, 3 trigger), `V2` (dữ liệu mẫu) và `V3` (giỏ hàng và nhật ký cấp tài khoản). API chỉ dùng `ddl-auto=validate`, không để Hibernate tự tạo/sửa bảng. MySQL trong container dùng cổng 3306, từ Windows kết nối qua **localhost:3307**. Nếu cổng 8080 hoặc 3307 đã bận, đặt `API_HOST_PORT` hoặc `MYSQL_HOST_PORT` trong file `.env` cục bộ (Git bỏ qua).
 
-Các SQL init chỉ chạy ở lần tạo volume đầu tiên. Nếu bạn đã có Docker volume cũ thiếu bảng, `up --build` không tự nâng cấp dữ liệu đó và MySQL healthcheck sẽ báo lỗi. Hãy sao lưu rồi áp dụng migration phù hợp, hoặc tạo một Compose project/volume mới để thử nghiệm; **không chạy `docker compose down -v` nếu còn dữ liệu cần giữ**. Mật khẩu mặc định chỉ dành cho demo cục bộ; đặt mật khẩu riêng trong `.env` khi chia sẻ môi trường.
+Với volume cũ đã có schema chuẩn 15 bảng, Flyway tạo bản ghi baseline version 1 rồi chạy `V2` và `V3`; **sao lưu DB trước lần nâng cấp đầu tiên**. Nếu volume có schema khác hoặc chưa hoàn chỉnh, hãy nâng cấp schema cũ trước; không dùng baseline tự động để che lỗi. Không chạy `docker compose down -v` nếu còn dữ liệu cần giữ. Các migration đã áp dụng không được sửa nội dung; thay đổi mới phải là file `V4__...sql` trở đi.
+
+MySQL **không tự tạo admin với mật khẩu mẫu**. Khi khởi tạo database hoàn toàn mới, tạo file `.env` cục bộ (không commit) với `BOOTSTRAP_ADMIN_EMAIL=...` và `BOOTSTRAP_ADMIN_PASSWORD=...` (12-72 ký tự, chữ hoa, chữ thường, số, ký tự đặc biệt). Bootstrap chỉ tạo tài khoản nếu bảng `users` đang trống và không bao giờ đặt lại mật khẩu. Sau đó ADMIN đăng nhập và dùng `POST /api/admin/employee-accounts` để tạo các tài khoản ADMIN khác kèm hồ sơ nhân viên; yêu cầu nhập lại `currentPassword`. Việc cấp tài khoản được ghi vào `admin_account_audit`; nhân viên nên đổi mật khẩu qua `POST /api/users/me/password`. Không dùng mật khẩu mẫu cho môi trường chia sẻ.
 
 ## Chạy với MySQL Workbench
 
-1. Database mới: chạy `database/01_schema.sql`, `database/02_seed.sql`, rồi `database/03_create_local_user.sql`. Database bốn bảng đang dùng: chạy `05_prepare_normalized_upgrade.sql`, chạy lại `01_schema.sql`, rồi `02_seed.sql`.
+1. Tạo database rỗng `sales_service` và cấp quyền cho user ứng dụng. **Không chạy `01_schema.sql`/`02_seed.sql` trên database mới**; Flyway sẽ tự chạy migration khi ứng dụng khởi động. Database cũ phải được sao lưu và có đủ schema chuẩn trước khi baseline.
 2. Trong IntelliJ, mở **Run > Edit Configurations**.
 3. Thêm biến môi trường `SPRING_PROFILES_ACTIVE=mysql`.
-4. Nếu không dùng tài khoản mẫu, thêm `DB_USERNAME` và `DB_PASSWORD` của bạn.
+4. Thêm `DB_USERNAME`, `DB_PASSWORD` nếu khác mặc định. Với database rỗng, thêm `BOOTSTRAP_ADMIN_EMAIL` và `BOOTSTRAP_ADMIN_PASSWORD` để tạo admin đầu tiên.
 5. Chạy lại `SalesServiceApplication`.
 
 Profile `mysql` mặc định kết nối `jdbc:mysql://localhost:3306/sales_service` với tài khoản `sales_user`. Hibernate dùng `ddl-auto=validate`, nên ứng dụng chỉ kiểm tra schema thay vì tự ý sửa bảng.
 
-## Tài khoản demo
+## Tài khoản demo H2
 
 ```text
 Email: admin@example.com
@@ -102,7 +111,7 @@ Password: Admin@123
 Role: ADMIN
 ```
 
-Không sử dụng tài khoản hoặc JWT secret mặc định khi triển khai thật.
+Tài khoản này chỉ tự tạo khi dùng H2 mặc định hoặc bật seed một cách tường minh. MySQL không tự tạo tài khoản mẫu. Không sử dụng tài khoản hoặc JWT secret mặc định khi triển khai thật.
 
 ## API chính
 
@@ -111,8 +120,10 @@ Không sử dụng tài khoản hoặc JWT secret mặc định khi triển khai
 | POST | `/api/auth/register` | Công khai |
 | POST | `/api/auth/login` | Công khai |
 | GET | `/api/products` | Công khai |
+| GET | `/api/products/search?q=&page=0&size=20` | Công khai |
 | GET | `/api/products/{id}` | Công khai |
 | GET | `/api/users/me` | Đã đăng nhập |
+| POST | `/api/users/me/password` | Đã đăng nhập |
 | GET, PUT | `/api/users/me/profile` | CUSTOMER |
 | GET | `/api/admin/customers`, `/api/admin/customers/{userId}/profile` | ADMIN |
 | PATCH | `/api/admin/customers/{userId}/credit-limit` | ADMIN |
@@ -120,6 +131,7 @@ Không sử dụng tài khoản hoặc JWT secret mặc định khi triển khai
 | GET, PUT | `/api/admin/offices/{id}` | ADMIN |
 | GET, POST | `/api/admin/employees` | ADMIN |
 | GET, PUT | `/api/admin/employees/{userId}` | ADMIN |
+| POST | `/api/admin/employee-accounts` | ADMIN + mật khẩu hiện tại |
 | GET | `/api/categories`, `/api/categories/{id}` | Công khai |
 | GET | `/api/products/{id}/categories` | Công khai |
 | POST, PUT | `/api/admin/categories[/{id}]` | ADMIN |
@@ -133,10 +145,15 @@ Không sử dụng tài khoản hoặc JWT secret mặc định khi triển khai
 | DELETE | `/api/products/{id}` | ADMIN |
 | GET, POST, PUT, DELETE | `/api/users/me/addresses[/{id}]` | CUSTOMER |
 | POST | `/api/orders` | CUSTOMER |
+| GET, DELETE | `/api/cart` | CUSTOMER |
+| PUT, DELETE | `/api/cart/items/{productId}` | CUSTOMER |
+| POST | `/api/cart/checkout` | CUSTOMER |
 | GET | `/api/orders/me` | CUSTOMER |
+| GET | `/api/orders/me/search?code=&status=&page=0&size=20` | CUSTOMER |
 | GET | `/api/orders/{id}` | Chủ đơn hàng |
 | GET | `/api/orders/{id}/history`, `/api/orders/{id}/payments` | Chủ đơn hàng |
 | GET | `/api/admin/orders` | ADMIN |
+| GET | `/api/admin/orders/search?code=&status=&page=0&size=20` | ADMIN |
 | PATCH | `/api/admin/orders/{id}/status` | ADMIN |
 | GET | `/api/admin/orders/{id}/history`, `/api/admin/orders/{id}/payments` | ADMIN |
 | POST | `/api/admin/orders/{id}/payments` | ADMIN |
@@ -144,9 +161,26 @@ Không sử dụng tài khoản hoặc JWT secret mặc định khi triển khai
 | GET | `/api/admin/products/{id}/inventory` | ADMIN |
 | POST | `/api/admin/products/{id}/inventory/adjustments` | ADMIN |
 
+Thử nhanh bằng Swagger: đăng nhập ADMIN và bấm **Authorize**, tạo văn phòng để lấy `officeId`, rồi gọi `POST /api/admin/employee-accounts`:
+
+```json
+{
+  "currentPassword": "mật khẩu ADMIN đang đăng nhập",
+  "fullName": "Nhân viên A",
+  "email": "staff-a@example.com",
+  "password": "New@Strong1234",
+  "employeeCode": "EMP-A001",
+  "officeId": 1,
+  "jobTitle": "Nhân viên bán hàng",
+  "hireDate": "2024-01-01"
+}
+```
+
+Đăng nhập tài khoản mới rồi đổi mật khẩu bằng `POST /api/users/me/password` với `currentPassword` và `newPassword`. Customer thử `PUT /api/cart/items/{productId}` với `{"quantity":2}`, sau đó `POST /api/cart/checkout` với `recipientName`, `recipientPhone`, `shippingAddress`. Giỏ hàng không giữ chỗ tồn kho; checkout sẽ kiểm tra lại.
+
 Thanh toán chỉ là **ghi nhận thủ công**, chưa kết nối cổng thanh toán thật. Khi chuyển sang `PAID`, tổng tiền đã thanh toán không được vượt tổng đơn. Đơn đã thanh toán phải hoàn tiền (`REFUNDED`) trước khi hủy. Tạo đơn ghi `SALE`, hủy đơn ghi `SALE_REVERSAL` vào `inventory_movements` trong cùng transaction.
 
-Hồ sơ nhân viên chỉ được tạo cho tài khoản `ADMIN` đã tồn tại. Đăng ký `CUSTOMER` sẽ tạo hồ sơ khách hàng; khách chỉ sửa số điện thoại/ngày sinh, còn admin mới sửa hạn mức. Xem [hướng dẫn thử API bằng Swagger](docs/SWAGGER_TEST_GUIDE.md).
+Hồ sơ nhân viên chỉ gắn với tài khoản `ADMIN`; endpoint cấp tài khoản mới tạo user và hồ sơ trong cùng transaction. Đăng ký công khai chỉ tạo `CUSTOMER`. Xem [hướng dẫn thử API bằng Swagger](docs/SWAGGER_TEST_GUIDE.md).
 
 ### Lấy token admin
 

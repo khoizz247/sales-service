@@ -1,6 +1,8 @@
 spring:
   application:
     name: sales-service
+  flyway:
+    enabled: false
   datasource:
     url: ${DB_URL:jdbc:h2:mem:salesdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE}
     username: ${DB_USERNAME:sa}

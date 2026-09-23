@@ -10,6 +10,8 @@ public interface ProductRepository {
 
     List<Product> findAllActive();
 
+    ProductPage searchActive(String query, int page, int size);
+
     Optional<Product> findById(Long id);
 
     List<Product> findAllByIdsForUpdate(List<Long> ids);

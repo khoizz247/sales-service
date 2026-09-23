@@ -12,4 +12,8 @@ public interface UserRepository {
     Optional<User> findById(Long id);
 
     boolean existsByEmail(String email);
+
+    long count();
+
+    void updatePassword(Long id, String passwordHash);
 }

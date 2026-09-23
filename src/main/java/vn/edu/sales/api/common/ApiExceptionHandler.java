@@ -4,6 +4,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -31,6 +33,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiError> handleDataConflict(DataIntegrityViolationException exception, HttpServletRequest request) {
         return error(HttpStatus.CONFLICT, "DATA_CONFLICT", "Dữ liệu trùng hoặc vi phạm ràng buộc",
+                request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler({ObjectOptimisticLockingFailureException.class, PessimisticLockingFailureException.class})
+    ResponseEntity<ApiError> handleConcurrentChange(Exception exception, HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "CONCURRENT_CHANGE", "Dữ liệu vừa được thay đổi; vui lòng thử lại",
                 request.getRequestURI(), null);
     }
 

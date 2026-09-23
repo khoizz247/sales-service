@@ -2,6 +2,11 @@ spring:
   config:
     activate:
       on-profile: mysql
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+    validate-on-migrate: true
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/sales_service?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Bangkok}
     username: ${DB_USERNAME:sales_user}
@@ -11,6 +16,8 @@ spring:
     init:
       mode: never
   jpa:
+    # H2 uses deferred schema-h2.sql; MySQL must let Flyway run before JPA validation.
+    defer-datasource-initialization: false
     hibernate:
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:validate}
     properties:
@@ -19,3 +26,6 @@ spring:
   h2:
     console:
       enabled: false
+app:
+  seed:
+    enabled: false

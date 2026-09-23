@@ -2,11 +2,13 @@ package vn.edu.sales;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -16,6 +18,10 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.UUID;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -28,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class SalesApiIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
+    @Autowired JdbcTemplate jdbc;
 
     @Test
     void customerCannotCreateUpdateOrDeleteProduct() throws Exception {
@@ -48,6 +55,8 @@ class SalesApiIntegrationTest {
     @Test
     void adminCanManageProductAndChangesAreRecordedInInventory() throws Exception {
         String admin = adminToken();
+        long actorId = response(mvc.perform(withToken(get("/api/users/me"), admin))
+                .andExpect(status().isOk())).path("id").asLong();
         long id = createProduct(admin, 6, "100.00").path("id").asLong();
         mvc.perform(withToken(put("/api/products/{id}", id), admin).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"Sản phẩm mới\",\"price\":120,\"stockQuantity\":6}"))
@@ -61,8 +70,178 @@ class SalesApiIntegrationTest {
         assertThat(movements.size()).isEqualTo(2);
         assertThat(movements.get(0).path("type").asText()).isEqualTo("OPENING_BALANCE");
         assertThat(movements.get(1).path("type").asText()).isEqualTo("ADJUSTMENT_OUT");
+        assertThat(movements.get(0).path("actorUserId").asLong()).isEqualTo(actorId);
+        assertThat(movements.get(1).path("actorUserId").asLong()).isEqualTo(actorId);
         mvc.perform(withToken(delete("/api/products/{id}", id), admin)).andExpect(status().isNoContent());
         mvc.perform(get("/api/products/{id}", id)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void adminCanProvisionAnotherEmployeeOnlyAfterPasswordConfirmation() throws Exception {
+        String admin = adminToken();
+        String customer = customerToken();
+        JsonNode office = response(mvc.perform(withToken(post("/api/admin/offices"), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                        "officeCode", unique("OFF"), "name", "Văn phòng mới", "phone", "0901234567",
+                        "addressLine1", "1 Hà Nội", "city", "Hà Nội", "countryCode", "VN"))))
+                .andExpect(status().isCreated()));
+        String email = unique("staff") + "@example.com";
+        String body = json.writeValueAsString(Map.of(
+                "currentPassword", "Admin@123", "fullName", "Nhân viên mới", "email", email,
+                "password", "Strong@Pass123", "employeeCode", unique("EMP"),
+                "officeId", office.path("id").asLong(), "jobTitle", "Nhân viên", "hireDate", "2024-01-01"));
+        mvc.perform(withToken(post("/api/admin/employee-accounts"), customer)
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mvc.perform(withToken(post("/api/admin/employee-accounts"), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(body.replace("Admin@123", "Wrong@123")))
+                .andExpect(status().isUnauthorized());
+        ObjectNode invalidOffice = (ObjectNode) json.readTree(body);
+        invalidOffice.put("officeId", Long.MAX_VALUE);
+        mvc.perform(withToken(post("/api/admin/employee-accounts"), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(invalidOffice)))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("email", email, "password", "Strong@Pass123"))))
+                .andExpect(status().isUnauthorized());
+        JsonNode created = response(mvc.perform(withToken(post("/api/admin/employee-accounts"), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated()));
+        assertThat(created.path("role").asText()).isEqualTo("ADMIN");
+        assertThat(created.path("employee").path("userId").asLong())
+                .isEqualTo(created.path("userId").asLong());
+        assertThat(created.has("password")).isFalse();
+        assertThat(jdbc.queryForObject("SELECT actor_user_id FROM admin_account_audit WHERE created_user_id=?",
+                Long.class, created.path("userId").asLong())).isNotNull();
+        JsonNode loggedIn = response(mvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("email", email, "password", "Strong@Pass123"))))
+                .andExpect(status().isOk()));
+        assertThat(loggedIn.path("role").asText()).isEqualTo("ADMIN");
+        String newToken = loggedIn.path("accessToken").asText();
+        mvc.perform(withToken(post("/api/users/me/password"), newToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"currentPassword\":\"Strong@Pass123\",\"newPassword\":\"New@Strong456\"}"))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("email", email, "password", "Strong@Pass123"))))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("email", email, "password", "New@Strong456"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void searchIsPagedAndCartCheckoutIsAtomic() throws Exception {
+        String admin = adminToken();
+        String customer = customerToken();
+        String otherCustomer = customerToken();
+        String prefix = unique("PAGE");
+        long chosenId = 0;
+        for (int i = 0; i < 3; i++) {
+            JsonNode product = response(mvc.perform(withToken(post("/api/products"), admin)
+                    .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                            "sku", prefix + i, "name", "Sản phẩm trang", "price", 100,
+                            "stockQuantity", 5)))).andExpect(status().isCreated()));
+            if (i == 0) chosenId = product.path("id").asLong();
+        }
+        JsonNode firstPage = response(mvc.perform(get("/api/products/search")
+                .param("q", prefix).param("page", "0").param("size", "1"))
+                .andExpect(status().isOk()));
+        assertThat(firstPage.path("totalElements").asLong()).isEqualTo(3);
+        assertThat(firstPage.path("items").size()).isEqualTo(1);
+        mvc.perform(get("/api/products/search").param("size", "101"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(withToken(put("/api/cart/items/{id}", chosenId), customer)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":2}"))
+                .andExpect(status().isOk());
+        mvc.perform(withToken(get("/api/cart"), admin)).andExpect(status().isForbidden());
+        assertThat(response(mvc.perform(withToken(get("/api/cart"), otherCustomer))
+                .andExpect(status().isOk())).size()).isZero();
+        JsonNode order = response(mvc.perform(withToken(post("/api/cart/checkout"), customer)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"recipientName\":\"A\"," +
+                        "\"recipientPhone\":\"0901234567\",\"shippingAddress\":\"1 Hà Nội\"}"))
+                .andExpect(status().isCreated()));
+        assertThat(order.path("totalAmount").decimalValue()).isEqualByComparingTo("200.00");
+        assertThat(stock(chosenId)).isEqualTo(3);
+        JsonNode cart = response(mvc.perform(withToken(get("/api/cart"), customer))
+                .andExpect(status().isOk()));
+        assertThat(cart.size()).isZero();
+        mvc.perform(withToken(post("/api/cart/checkout"), customer).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipientName\":\"A\",\"recipientPhone\":\"0901234567\"," +
+                        "\"shippingAddress\":\"1 Hà Nội\"}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void cartRemainsIntactWhenStockChangesBeforeCheckout() throws Exception {
+        String admin = adminToken();
+        String customer = customerToken();
+        long productId = createProduct(admin, 3, "100.00").path("id").asLong();
+        mvc.perform(withToken(put("/api/cart/items/{id}", productId), customer)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":3}"))
+                .andExpect(status().isOk());
+        mvc.perform(withToken(patch("/api/products/{id}/stock", productId), admin)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"stockQuantity\":1}"))
+                .andExpect(status().isOk());
+        mvc.perform(withToken(post("/api/cart/checkout"), customer)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"recipientName\":\"A\"," +
+                        "\"recipientPhone\":\"0901234567\",\"shippingAddress\":\"1 Hà Nội\"}"))
+                .andExpect(status().isConflict());
+        assertThat(stock(productId)).isEqualTo(1);
+        assertThat(response(mvc.perform(withToken(get("/api/cart"), customer))
+                .andExpect(status().isOk())).size()).isEqualTo(1);
+    }
+
+    @Test
+    void duplicateSkuAndRepeatedProductLineAreRejected() throws Exception {
+        String admin = adminToken();
+        String customer = customerToken();
+        String sku = unique("DUP");
+        String product = json.writeValueAsString(Map.of("sku", sku, "name", "Sản phẩm thử",
+                "price", 100, "stockQuantity", 4));
+        JsonNode created = response(mvc.perform(withToken(post("/api/products"), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(product)).andExpect(status().isCreated()));
+        mvc.perform(withToken(post("/api/products"), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(product)).andExpect(status().isConflict());
+        long id = created.path("id").asLong();
+        String repeated = json.writeValueAsString(Map.of("recipientName", "A",
+                "recipientPhone", "0901234567", "shippingAddress", "1 Hà Nội",
+                "items", new Object[] {Map.of("productId", id, "quantity", 1),
+                        Map.of("productId", id, "quantity", 1)}));
+        mvc.perform(withToken(post("/api/orders"), customer).contentType(MediaType.APPLICATION_JSON)
+                .content(repeated)).andExpect(status().isBadRequest());
+        assertThat(stock(id)).isEqualTo(4);
+    }
+
+    @Test
+    void simultaneousOrdersCannotOversellTheSameProduct() throws Exception {
+        String admin = adminToken();
+        String firstCustomer = customerToken();
+        String secondCustomer = customerToken();
+        long productId = createProduct(admin, 1, "100.00").path("id").asLong();
+        String body = orderBody(productId, 1);
+        CountDownLatch start = new CountDownLatch(1);
+        var pool = Executors.newFixedThreadPool(2);
+        try {
+            var first = pool.submit(() -> {
+                start.await();
+                return mvc.perform(withToken(post("/api/orders"), firstCustomer)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andReturn().getResponse().getStatus();
+            });
+            var second = pool.submit(() -> {
+                start.await();
+                return mvc.perform(withToken(post("/api/orders"), secondCustomer)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andReturn().getResponse().getStatus();
+            });
+            start.countDown();
+            assertThat(List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(201, 409);
+            assertThat(stock(productId)).isZero();
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test
@@ -164,10 +343,19 @@ class SalesApiIntegrationTest {
         String secondCustomer = customerToken();
         long productId = createProduct(admin, 3, "100.00").path("id").asLong();
         long orderId = createOrder(firstCustomer, productId, 1).path("id").asLong();
+        String code = response(mvc.perform(withToken(get("/api/orders/{id}", orderId), firstCustomer))
+                .andExpect(status().isOk())).path("orderCode").asText();
         mvc.perform(withToken(get("/api/orders/{id}", orderId), secondCustomer))
                 .andExpect(status().isNotFound());
         mvc.perform(withToken(get("/api/orders/{id}/payments", orderId), secondCustomer))
                 .andExpect(status().isNotFound());
+        JsonNode otherSearch = response(mvc.perform(withToken(get("/api/orders/me/search"), secondCustomer)
+                .param("code", code)).andExpect(status().isOk()));
+        assertThat(otherSearch.path("totalElements").asLong()).isZero();
+        JsonNode adminSearch = response(mvc.perform(withToken(get("/api/admin/orders/search"), admin)
+                .param("code", code).param("status", "PENDING").param("size", "1"))
+                .andExpect(status().isOk()));
+        assertThat(adminSearch.path("totalElements").asLong()).isEqualTo(1);
     }
 
     @Test

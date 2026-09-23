@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import vn.edu.sales.application.service.OrderService;
 import vn.edu.sales.domain.model.Order;
 import vn.edu.sales.domain.model.OrderItem;
+import vn.edu.sales.domain.model.OrderStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -40,6 +41,15 @@ public class OrderController {
         return orderService.getMine(authentication.getName()).stream().map(OrderResponse::from).toList();
     }
 
+    @GetMapping("/me/search")
+    public PagedOrders searchMine(Authentication authentication,
+                                  @RequestParam(required = false) OrderStatus status,
+                                  @RequestParam(defaultValue = "") String code,
+                                  @RequestParam(defaultValue = "0") int page,
+                                  @RequestParam(defaultValue = "20") int size) {
+        return PagedOrders.from(orderService.searchMine(authentication.getName(), status, code, page, size));
+    }
+
     @GetMapping("/{id}")
     public OrderResponse detail(Authentication authentication, @PathVariable Long id) {
         return OrderResponse.from(orderService.getMineById(authentication.getName(), id));
@@ -53,6 +63,14 @@ public class OrderController {
     }
 
     public record CreateOrderItemRequest(@NotNull Long productId, @Min(1) int quantity) {
+    }
+
+    public record PagedOrders(List<OrderResponse> items, int page, int size,
+                              long totalElements, int totalPages) {
+        public static PagedOrders from(OrderService.OrderPage result) {
+            return new PagedOrders(result.items().stream().map(OrderResponse::from).toList(),
+                    result.page(), result.size(), result.totalElements(), result.totalPages());
+        }
     }
 
     public record OrderResponse(Long id, String orderCode, Long userId, String recipientName,

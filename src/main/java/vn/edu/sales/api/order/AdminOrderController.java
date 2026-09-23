@@ -22,6 +22,14 @@ public class AdminOrderController {
         return orderService.getAll(status).stream().map(OrderController.OrderResponse::from).toList();
     }
 
+    @GetMapping("/search")
+    public OrderController.PagedOrders search(@RequestParam(required = false) OrderStatus status,
+                                               @RequestParam(defaultValue = "") String code,
+                                               @RequestParam(defaultValue = "0") int page,
+                                               @RequestParam(defaultValue = "20") int size) {
+        return OrderController.PagedOrders.from(orderService.searchAll(status, code, page, size));
+    }
+
     @PatchMapping("/{id}/status")
     public OrderController.OrderResponse updateStatus(@PathVariable Long id,
                                                        @Valid @RequestBody UpdateOrderStatusRequest request) {

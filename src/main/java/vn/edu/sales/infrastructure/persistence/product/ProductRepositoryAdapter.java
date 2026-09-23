@@ -1,6 +1,8 @@
 package vn.edu.sales.infrastructure.persistence.product;
 
 import org.springframework.stereotype.Repository;
+import org.springframework.data.domain.PageRequest;
+import vn.edu.sales.application.port.out.ProductPage;
 import vn.edu.sales.application.port.out.ProductRepository;
 import vn.edu.sales.domain.model.Product;
 import vn.edu.sales.domain.model.ProductStatus;
@@ -30,6 +32,13 @@ public class ProductRepositoryAdapter implements ProductRepository {
         return repository.findAllByStatusOrderByIdDesc(ProductStatus.ACTIVE).stream()
                 .map(this::toDomain)
                 .toList();
+    }
+
+    @Override
+    public ProductPage searchActive(String query, int page, int size) {
+        var result = repository.searchByStatus(ProductStatus.ACTIVE, query, PageRequest.of(page, size));
+        return new ProductPage(result.getContent().stream().map(this::toDomain).toList(),
+                page, size, result.getTotalElements(), result.getTotalPages());
     }
 
     @Override
