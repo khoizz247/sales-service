@@ -1,0 +1,11 @@
+.git
+.idea
+.env
+target
+out
+work
+docs
+database
+scripts
+*.iml
+*.log

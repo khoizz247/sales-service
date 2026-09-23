@@ -61,6 +61,29 @@ Kiểm thử:
 .\mvnw.cmd test
 ```
 
+## Chạy API và MySQL bằng Docker Compose
+
+Cần Docker Desktop đang chạy. Kiểm tra trong IntelliJ Terminal bằng `docker --version` và `docker compose version`. Nếu lệnh `docker` chưa tồn tại, xem [hướng dẫn cài Docker Desktop cho Windows](https://docs.docker.com/desktop/setup/install/windows-install/), mở Docker Desktop rồi mở lại Terminal.
+
+```powershell
+docker compose config --quiet
+docker compose up --build
+```
+
+Mở một Terminal khác để xác minh:
+
+```powershell
+docker compose ps
+docker compose exec mysql sh /usr/local/bin/mysql-healthcheck.sh
+curl.exe http://localhost:8080/api/products
+```
+
+Kết quả mong đợi: cả `mysql` và `api` là `healthy`, lệnh kiểm tra MySQL thoát với mã 0 và API trả danh sách sản phẩm JSON. Swagger ở <http://localhost:8080/swagger-ui.html>. Để dừng, nhấn `Ctrl+C` ở Terminal chạy `up`; dữ liệu trong Docker volume vẫn được giữ lại.
+
+Docker dùng duy nhất schema `sales_service`: MySQL chạy `database/01_schema.sql` và `database/02_seed.sql` khi **volume còn trống**; healthcheck kiểm tra 15 bảng, 2 view và 3 trigger. API chờ MySQL khỏe rồi mới chạy, dùng `ddl-auto=validate` để kiểm tra mapping chứ không tự tạo/sửa bảng. MySQL trong container dùng cổng 3306, còn từ máy Windows kết nối qua **localhost:3307** để tránh đụng MySQL cài sẵn trên cổng 3306. Nếu cổng 8080 hoặc 3307 đã bận, đặt `API_HOST_PORT` hoặc `MYSQL_HOST_PORT` trong file `.env` cục bộ (file này được Git bỏ qua).
+
+Các SQL init chỉ chạy ở lần tạo volume đầu tiên. Nếu bạn đã có Docker volume cũ thiếu bảng, `up --build` không tự nâng cấp dữ liệu đó và MySQL healthcheck sẽ báo lỗi. Hãy sao lưu rồi áp dụng migration phù hợp, hoặc tạo một Compose project/volume mới để thử nghiệm; **không chạy `docker compose down -v` nếu còn dữ liệu cần giữ**. Mật khẩu mặc định chỉ dành cho demo cục bộ; đặt mật khẩu riêng trong `.env` khi chia sẻ môi trường.
+
 ## Chạy với MySQL Workbench
 
 1. Database mới: chạy `database/01_schema.sql`, `database/02_seed.sql`, rồi `database/03_create_local_user.sql`. Database bốn bảng đang dùng: chạy `05_prepare_normalized_upgrade.sql`, chạy lại `01_schema.sql`, rồi `02_seed.sql`.
