@@ -7,6 +7,9 @@ spring:
     username: ${DB_USERNAME:sales_user}
     password: ${DB_PASSWORD:sales_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      mode: never
   jpa:
     hibernate:
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:validate}

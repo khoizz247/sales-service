@@ -1,6 +1,8 @@
 package vn.edu.sales.application.service;
 
 import vn.edu.sales.application.port.out.OrderRepository;
+import vn.edu.sales.application.port.out.InventoryStore;
+import vn.edu.sales.application.port.out.PaymentStore;
 import vn.edu.sales.application.port.out.ProductRepository;
 import vn.edu.sales.application.port.out.TransactionRunner;
 import vn.edu.sales.application.port.out.UserRepository;
@@ -18,13 +20,18 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final TransactionRunner transactionRunner;
+    private final InventoryStore inventory;
+    private final PaymentStore payments;
 
     public OrderService(OrderRepository orderRepository, ProductRepository productRepository,
-                        UserRepository userRepository, TransactionRunner transactionRunner) {
+                        UserRepository userRepository, TransactionRunner transactionRunner, InventoryStore inventory,
+                        PaymentStore payments) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.userRepository = userRepository;
         this.transactionRunner = transactionRunner;
+        this.inventory = inventory;
+        this.payments = payments;
     }
 
     public Order create(String customerEmail, String recipientName, String recipientPhone,
@@ -56,8 +63,15 @@ public class OrderService {
             }
 
             productRepository.saveAll(changedProducts);
-            return orderRepository.save(new Order(null, newOrderCode(), user.id(), recipientName,
+            Order saved = orderRepository.save(new Order(null, newOrderCode(), user.id(), recipientName,
                     recipientPhone, shippingAddress, OrderStatus.PENDING, null, null, null, items));
+            for (CreateLine line : lines) {
+                Product product = products.get(line.productId());
+                inventory.record(product.id(), saved.id(), "SALE", -line.quantity(), product.stockQuantity(),
+                        product.stockQuantity() - line.quantity(), saved.orderCode() + "-SALE-" + product.id(),
+                        "Đặt hàng", user.id());
+            }
+            return saved;
         });
     }
 
@@ -81,7 +95,11 @@ public class OrderService {
                     .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng: " + id));
             if (order.status() == nextStatus) return order;
             validateTransition(order.status(), nextStatus);
-            if (nextStatus == OrderStatus.CANCELLED) restoreStock(order);
+            if (nextStatus == OrderStatus.CANCELLED) {
+                if (payments.paidTotal(id).signum() > 0)
+                    throw new BusinessConflictException("Đơn đã thanh toán, cần hoàn tiền trước khi hủy");
+                restoreStock(order);
+            }
             return orderRepository.save(order.withStatus(nextStatus));
         });
     }
@@ -96,6 +114,12 @@ public class OrderService {
             return product.withStock(product.stockQuantity() + item.quantity());
         }).toList();
         productRepository.saveAll(changed);
+        for (OrderItem item : order.items()) {
+            Product before = products.get(item.productId());
+            inventory.record(before.id(), order.id(), "SALE_REVERSAL", item.quantity(), before.stockQuantity(),
+                    before.stockQuantity() + item.quantity(), order.orderCode() + "-REVERSAL-" + before.id(),
+                    "Hủy đơn hàng", null);
+        }
     }
 
     private void validateTransition(OrderStatus current, OrderStatus next) {

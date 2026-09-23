@@ -2,6 +2,8 @@ package vn.edu.sales.application.service;
 
 import org.junit.jupiter.api.Test;
 import vn.edu.sales.application.port.out.ProductRepository;
+import vn.edu.sales.application.port.out.InventoryStore;
+import vn.edu.sales.application.port.out.TransactionRunner;
 import vn.edu.sales.domain.model.Product;
 import vn.edu.sales.domain.model.ProductStatus;
 
@@ -17,7 +19,10 @@ class ProductServiceTest {
     @Test
     void createsAValidProductWithoutDependingOnSpringOrJpa() {
         InMemoryProductRepository repository = new InMemoryProductRepository();
-        ProductService service = new ProductService(repository);
+        ProductService service = new ProductService(repository, new NoOpInventoryStore(),
+                new TransactionRunner() {
+                    @Override public <T> T execute(java.util.function.Supplier<T> work) { return work.get(); }
+                });
 
         Product product = service.create("sku-001", "  Sản phẩm A  ", "Mô tả", new BigDecimal("120000"), 5);
 
@@ -25,6 +30,12 @@ class ProductServiceTest {
         assertThat(product.name()).isEqualTo("Sản phẩm A");
         assertThat(product.sku()).isEqualTo("SKU-001");
         assertThat(product.status()).isEqualTo(ProductStatus.ACTIVE);
+    }
+
+    private static class NoOpInventoryStore implements InventoryStore {
+        @Override public void record(Long productId, Long orderId, String type, int change, int before,
+                                     int after, String reference, String note, Long actorUserId) {}
+        @Override public List<Movement> byProduct(Long productId) { return List.of(); }
     }
 
     private static class InMemoryProductRepository implements ProductRepository {

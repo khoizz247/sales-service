@@ -27,6 +27,11 @@ public class UserRepositoryAdapter implements UserRepository {
     }
 
     @Override
+    public Optional<User> findById(Long id) {
+        return repository.findById(id).map(this::toDomain);
+    }
+
+    @Override
     public boolean existsByEmail(String email) {
         return repository.existsByEmail(email);
     }

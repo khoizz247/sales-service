@@ -3,6 +3,7 @@ package vn.edu.sales.api.common;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -25,6 +26,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(BusinessConflictException.class)
     ResponseEntity<ApiError> handleConflict(BusinessConflictException exception, HttpServletRequest request) {
         return error(HttpStatus.CONFLICT, "BUSINESS_CONFLICT", exception.getMessage(), request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ResponseEntity<ApiError> handleDataConflict(DataIntegrityViolationException exception, HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "DATA_CONFLICT", "Dữ liệu trùng hoặc vi phạm ràng buộc",
+                request.getRequestURI(), null);
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)

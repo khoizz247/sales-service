@@ -6,9 +6,13 @@ spring:
     username: ${DB_USERNAME:sa}
     password: ${DB_PASSWORD:}
   jpa:
+    defer-datasource-initialization: true
     hibernate:
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
     open-in-view: false
+  sql:
+    init:
+      schema-locations: classpath:schema-h2.sql
   h2:
     console:
       enabled: true
