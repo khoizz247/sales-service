@@ -1,0 +1,172 @@
+{
+  "info": {
+    "name": "Sales Service - core API demo",
+    "description": "Run in order against a disposable MySQL database. The collection registers a customer, creates a product and order, cancels the order, then soft-deletes its own product. Set adminEmail and adminPassword before running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "adminEmail", "value": "" },
+    { "key": "adminPassword", "value": "" },
+    { "key": "customerPassword", "value": "Test@12345" },
+    { "key": "customerEmail", "value": "" },
+    { "key": "productSku", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "customerToken", "value": "" },
+    { "key": "productId", "value": "" },
+    { "key": "orderId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 - Admin login",
+      "event": [
+        { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+          "const suffix = Date.now() + '-' + Math.floor(Math.random() * 1000000);",
+          "pm.collectionVariables.set('customerEmail', 'newman-' + suffix + '@example.com');",
+          "pm.collectionVariables.set('productSku', 'NEWMAN-' + suffix);"
+        ] } },
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('Admin login returns 200', () => pm.response.to.have.status(200));",
+          "if (pm.response.code === 200) { const data = pm.response.json(); pm.test('Role is ADMIN', () => pm.expect(data.role).to.eql('ADMIN')); pm.collectionVariables.set('adminToken', data.accessToken); }"
+        ] } }
+      ],
+      "request": {
+        "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{adminEmail}}\",\"password\":\"{{adminPassword}}\"}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/auth/login"
+      }
+    },
+    {
+      "name": "02 - Register customer",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Customer registration returns 201', () => pm.response.to.have.status(201));",
+        "if (pm.response.code === 201) pm.test('Role is CUSTOMER', () => pm.expect(pm.response.json().role).to.eql('CUSTOMER'));"
+      ] } }],
+      "request": {
+        "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"fullName\":\"Newman customer\",\"email\":\"{{customerEmail}}\",\"password\":\"{{customerPassword}}\"}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/auth/register"
+      }
+    },
+    {
+      "name": "03 - Customer login",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Customer login returns 200', () => pm.response.to.have.status(200));",
+        "if (pm.response.code === 200) { const data = pm.response.json(); pm.test('Role is CUSTOMER', () => pm.expect(data.role).to.eql('CUSTOMER')); pm.collectionVariables.set('customerToken', data.accessToken); }"
+      ] } }],
+      "request": {
+        "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{customerEmail}}\",\"password\":\"{{customerPassword}}\"}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/auth/login"
+      }
+    },
+    {
+      "name": "04 - Missing JWT returns 401",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Protected endpoint returns 401 without JWT', () => pm.response.to.have.status(401));",
+        "if (pm.response.code === 401) pm.test('Error code is UNAUTHORIZED', () => pm.expect(pm.response.json().code).to.eql('UNAUTHORIZED'));"
+      ] } }],
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/users/me" }
+    },
+    {
+      "name": "05 - Customer cannot access admin orders",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Wrong role returns 403', () => pm.response.to.have.status(403));",
+        "if (pm.response.code === 403) pm.test('Error code is FORBIDDEN', () => pm.expect(pm.response.json().code).to.eql('FORBIDDEN'));"
+      ] } }],
+      "request": {
+        "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+        "url": "{{baseUrl}}/api/admin/orders?page=0&size=10"
+      }
+    },
+    {
+      "name": "06 - Admin creates product",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Product creation returns 201', () => pm.response.to.have.status(201));",
+        "if (pm.response.code === 201) { const data = pm.response.json(); pm.test('Initial stock is 3', () => pm.expect(data.stockQuantity).to.eql(3)); pm.collectionVariables.set('productId', data.id); }"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "body": { "mode": "raw", "raw": "{\"sku\":\"{{productSku}}\",\"name\":\"Newman test product\",\"description\":\"Disposable API demo\",\"price\":100,\"stockQuantity\":3}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/products"
+      }
+    },
+    {
+      "name": "07 - Search product by SKU",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Search returns 200', () => pm.response.to.have.status(200));",
+        "if (pm.response.code === 200) pm.test('New product is found', () => pm.expect(pm.response.json().items.some(item => item.id == pm.collectionVariables.get('productId'))).to.be.true);"
+      ] } }],
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/products/search?q={{productSku}}&page=0&size=10" }
+    },
+    {
+      "name": "08 - Customer creates order",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Order creation returns 201', () => pm.response.to.have.status(201));",
+        "if (pm.response.code === 201) { const data = pm.response.json(); pm.test('Server calculates total 200', () => pm.expect(Number(data.totalAmount)).to.eql(200)); pm.test('Status is PENDING', () => pm.expect(data.status).to.eql('PENDING')); pm.collectionVariables.set('orderId', data.id); }"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+        "body": { "mode": "raw", "raw": "{\"recipientName\":\"Newman customer\",\"recipientPhone\":\"0901234567\",\"shippingAddress\":\"Disposable API demo\",\"items\":[{\"productId\":{{productId}},\"quantity\":2}]}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/orders"
+      }
+    },
+    {
+      "name": "09 - Admin reads order detail",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Admin order detail returns 200', () => pm.response.to.have.status(200));",
+        "if (pm.response.code === 200) pm.test('Order ID matches', () => pm.expect(String(pm.response.json().id)).to.eql(String(pm.collectionVariables.get('orderId'))));"
+      ] } }],
+      "request": {
+        "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/api/admin/orders/{{orderId}}"
+      }
+    },
+    {
+      "name": "10 - Order reduces stock",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Product detail returns 200', () => pm.response.to.have.status(200));",
+        "if (pm.response.code === 200) pm.test('Stock decreased to 1', () => pm.expect(pm.response.json().stockQuantity).to.eql(1));"
+      ] } }],
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/products/{{productId}}" }
+    },
+    {
+      "name": "11 - Customer cancels PENDING order",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Cancellation returns 200', () => pm.response.to.have.status(200));",
+        "if (pm.response.code === 200) pm.test('Status is CANCELLED', () => pm.expect(pm.response.json().status).to.eql('CANCELLED'));"
+      ] } }],
+      "request": {
+        "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+        "url": "{{baseUrl}}/api/orders/{{orderId}}/cancel"
+      }
+    },
+    {
+      "name": "12 - Cancellation restores stock",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Product detail returns 200', () => pm.response.to.have.status(200));",
+        "if (pm.response.code === 200) pm.test('Stock restored to 3', () => pm.expect(pm.response.json().stockQuantity).to.eql(3));"
+      ] } }],
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/products/{{productId}}" }
+    },
+    {
+      "name": "13 - Admin soft-deletes demo product",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Product deletion returns 204', () => pm.response.to.have.status(204));"
+      ] } }],
+      "request": {
+        "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/api/products/{{productId}}"
+      }
+    },
+    {
+      "name": "14 - Deleted product is hidden",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Soft-deleted product returns 404', () => pm.response.to.have.status(404));"
+      ] } }],
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/products/{{productId}}" }
+    }
+  ]
+}

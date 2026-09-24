@@ -245,13 +245,25 @@ Trong Swagger, nhấn **Authorize** và dán trực tiếp giá trị `accessTok
 
 ## Kiểm thử tự động
 
-Chạy bộ JUnit/MockMvc bằng `mvnw.cmd test` (Windows), `./mvnw test` (macOS/Linux), hoặc chọn Maven → Lifecycle → `test` trong IntelliJ. Các test dùng profile `test` và H2 riêng, không kết nối MySQL của thành viên trong nhóm. Unit test kiểm tra `ProductService`, `AuthService`, `OrderService`; integration test kiểm tra phân quyền `CUSTOMER`/`ADMIN`, JWT `401`/`403`, quản lý sản phẩm, tồn kho khi đặt/hủy đơn, hủy lặp, chuyển trạng thái `409`, tổng tiền và các API hồ sơ, địa chỉ, văn phòng, nhân viên, danh mục, nhà cung cấp, thanh toán. Xem [src/test/java/vn/edu/sales](src/test/java/vn/edu/sales).
+Chạy bộ JUnit/MockMvc bằng `mvnw.cmd test` (Windows), `./mvnw test` (macOS/Linux), hoặc chọn Maven → Lifecycle → `test` trong IntelliJ. Các test này dùng profile `test` và H2 riêng, không kết nối MySQL của thành viên trong nhóm. Unit test kiểm tra `ProductService`, `AuthService`, `OrderService`; integration test kiểm tra phân quyền `CUSTOMER`/`ADMIN`, JWT `401`/`403`, quản lý sản phẩm, tồn kho khi đặt/hủy đơn, hủy lặp, chuyển trạng thái `409`, tổng tiền và các API hồ sơ, địa chỉ, văn phòng, nhân viên, danh mục, nhà cung cấp, thanh toán. ArchUnit chạy cùng lệnh `test` để chặn tầng nghiệp vụ phụ thuộc API, adapter lưu trữ hoặc framework web/DB. Xem [src/test/java/vn/edu/sales](src/test/java/vn/edu/sales).
 
-Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) chạy lại JUnit, dựng Docker Compose trên database rỗng và thử hai customer mua đồng thời toàn bộ tồn kho của một sản phẩm MySQL khi push/pull request tới `main`. Test H2 cũng có tình huống đồng thời. **Script MySQL này tiêu thụ tồn kho, chỉ chạy trên database dùng một lần.**
+Khi Docker Desktop đang chạy, dùng `mvnw.cmd verify` (Windows) hoặc `./mvnw verify` (macOS/Linux) để chạy thêm `MySqlContainerIT` bằng Testcontainers. Bài test này tự tạo MySQL 8.4 tạm thời, cho Flyway tạo schema, kiểm tra tạo/hủy đơn và hai customer mua đồng thời cùng một sản phẩm; không dùng database `sales_service` trên máy của bạn. `mvn test` không khởi động Testcontainers. Trong IntelliJ, chọn Maven → Lifecycle → `verify` để chạy đủ bộ.
+
+Dự án đặt Testcontainers `1.21.4` (ghi đè bản `1.21.0` mặc định của Spring Boot 3.5.0) để dùng Docker API tương thích với Docker Engine 29. Nếu `verify` báo không tìm thấy Docker, hãy mở Docker Desktop và kiểm tra `docker info --format '{{.ServerVersion}} {{.OSType}}'` phải trả về phiên bản cùng `linux` trước khi chạy lại.
+
+Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) chạy JUnit/ArchUnit/Testcontainers, dựng Docker Compose trên database rỗng, thử hai customer mua đồng thời toàn bộ tồn kho của một sản phẩm MySQL, rồi chạy Postman Collection bằng Newman khi push/pull request tới `main`. Test H2 cũng có tình huống đồng thời. **Script MySQL và Newman tạo dữ liệu thử, chỉ chạy trên database dùng một lần.**
 
 Kịch bản kiểm thử tải Kaggle CPU, Locust và cách xuất CSV nằm trong [performance/README.md](performance/README.md). Nhóm đã chạy đủ bốn pha trên Kaggle CPU; số liệu, phân tích và giới hạn phép đo nằm trong [báo cáo kiểm thử tải](performance/REPORT.md). Giữ ZIP kết quả gốc cùng bài nộp để đối chiếu.
 
 Để demo thủ công trong IntelliJ, mở [docs/demo.http](docs/demo.http) và bấm nút chạy cạnh từng request. Sửa email/mật khẩu ADMIN cho khớp tài khoản bootstrap của bạn, đăng nhập để lưu JWT, sau đó thử phân trang, tạo đơn, xem chi tiết và customer hủy đơn.
+
+Để demo bằng Postman, import [Collection](docs/sales-service.postman_collection.json), đặt `adminEmail`, `adminPassword` cho tài khoản ADMIN bootstrap và chạy Collection theo thứ tự. Collection tạo customer, sản phẩm và đơn thử, kiểm tra `401`/`403`, trừ/hoàn tồn kho, sau đó soft-delete chính sản phẩm vừa tạo. Chỉ chạy trên database dùng cho demo. Newman có thể chạy cùng Collection:
+
+```powershell
+npx --yes newman@6.2.2 run docs/sales-service.postman_collection.json --env-var "baseUrl=http://localhost:8080" --env-var "adminEmail=admin@example.com" --env-var "adminPassword=<mật khẩu ADMIN demo>" --bail
+```
+
+Không commit mật khẩu thật vào Collection hoặc repository; tham số dòng lệnh có thể lưu trong lịch sử terminal. Trong CI, tài khoản ADMIN tạm được tạo riêng và mật khẩu được che khỏi log.
 
 Có thể chạy thêm smoke test HTTP bằng [scripts/test-api.ps1](scripts/test-api.ps1) trên một phiên H2 **dành riêng cho test**:
 
