@@ -249,6 +249,8 @@ Chạy bộ JUnit/MockMvc bằng `mvnw.cmd test` (Windows), `./mvnw test` (macOS
 
 Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) chạy lại JUnit, dựng Docker Compose trên database rỗng và thử hai customer mua đồng thời toàn bộ tồn kho của một sản phẩm MySQL khi push/pull request tới `main`. Test H2 cũng có tình huống đồng thời. **Script MySQL này tiêu thụ tồn kho, chỉ chạy trên database dùng một lần.**
 
+Kịch bản kiểm thử tải Kaggle CPU, Locust và cách xuất CSV/báo cáo nằm trong [performance/README.md](performance/README.md). Các file này là công cụ chuẩn bị; chỉ báo cáo kết quả tải sau khi nhóm đã chạy notebook trên Kaggle và tải kết quả thực về.
+
 Để demo thủ công trong IntelliJ, mở [docs/demo.http](docs/demo.http) và bấm nút chạy cạnh từng request. Sửa email/mật khẩu ADMIN cho khớp tài khoản bootstrap của bạn, đăng nhập để lưu JWT, sau đó thử phân trang, tạo đơn, xem chi tiết và customer hủy đơn.
 
 Có thể chạy thêm smoke test HTTP bằng [scripts/test-api.ps1](scripts/test-api.ps1) trên một phiên H2 **dành riêng cho test**:
