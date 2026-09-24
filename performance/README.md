@@ -1,5 +1,7 @@
 # Kiểm thử tải trên Kaggle CPU
 
+Kết quả chạy thực tế và phần phân tích đã kiểm tra CSV/log nằm trong [REPORT.md](REPORT.md). Báo cáo này ứng với commit ứng dụng được ghi trong báo cáo; ZIP kết quả gốc cần được giữ cùng bài nộp để đối chiếu.
+
 Mở [kaggle_load_test.ipynb](kaggle_load_test.ipynb) trong **Kaggle Notebook mới**, chọn CPU và bật Internet trong Session options. Chạy lần lượt các cell hoặc chọn **Save & Run All**. Notebook clone `main` và ghi chính xác commit đã đo trong `metadata.json`; nếu đã thay đổi mã sau lần chạy, cần chạy lại để có kết quả của commit mới. Kaggle cho phép cài package từ notebook khi Internet bật và lưu output ở `/kaggle/working`.
 
 Notebook cần quyền root, Ubuntu có gói `mysql-server` 8.x và `openjdk-21-jdk-headless`, cùng khả năng tải dependency Maven/PyPI. Nó sẽ dừng với lỗi rõ nếu không đáp ứng điều kiện này. Script không dùng H2 hay database từ máy cá nhân. Sau khi cài, script tạo `sales_service` rỗng, chạy Flyway V1-V3, khởi động API và MySQL trực tiếp trên cùng phiên CPU, rồi chạy Locust ở `localhost:18080`. Không cần Docker trong Kaggle.
