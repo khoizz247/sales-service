@@ -6,8 +6,6 @@ import org.springframework.web.bind.annotation.*;
 import vn.edu.sales.application.service.OrderService;
 import vn.edu.sales.domain.model.OrderStatus;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/admin/orders")
 public class AdminOrderController {
@@ -18,8 +16,15 @@ public class AdminOrderController {
     }
 
     @GetMapping
-    public List<OrderController.OrderResponse> getAll(@RequestParam(required = false) OrderStatus status) {
-        return orderService.getAll(status).stream().map(OrderController.OrderResponse::from).toList();
+    public OrderController.PagedOrders getAll(@RequestParam(required = false) OrderStatus status,
+                                              @RequestParam(defaultValue = "0") int page,
+                                              @RequestParam(defaultValue = "20") int size) {
+        return OrderController.PagedOrders.from(orderService.searchAll(status, "", page, size));
+    }
+
+    @GetMapping("/{id}")
+    public OrderController.OrderResponse detail(@PathVariable Long id) {
+        return OrderController.OrderResponse.from(orderService.getAdminById(id));
     }
 
     @GetMapping("/search")

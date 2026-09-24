@@ -248,6 +248,105 @@ class SalesApiIntegrationTest {
     }
 
     @Test
+    void baseProductAndOrderListsArePaginated() throws Exception {
+        String admin = adminToken();
+        String customer = customerToken();
+        long productId = createProduct(admin, 5, "100.00").path("id").asLong();
+        JsonNode products = response(mvc.perform(get("/api/products").param("page", "0").param("size", "1"))
+                .andExpect(status().isOk()));
+        assertThat(products.path("items").size()).isEqualTo(1);
+        assertThat(products.path("size").asInt()).isEqualTo(1);
+        assertThat(products.path("totalElements").asLong()).isGreaterThanOrEqualTo(1);
+        long orderId = createOrder(customer, productId, 1).path("id").asLong();
+        JsonNode mine = response(mvc.perform(withToken(get("/api/orders/me"), customer)
+                .param("size", "1")).andExpect(status().isOk()));
+        assertThat(mine.path("items").size()).isEqualTo(1);
+        assertThat(mine.path("items").get(0).path("id").asLong()).isEqualTo(orderId);
+        JsonNode all = response(mvc.perform(withToken(get("/api/admin/orders"), admin)
+                .param("size", "1")).andExpect(status().isOk()));
+        assertThat(all.path("items").size()).isEqualTo(1);
+        mvc.perform(get("/api/products").param("size", "101")).andExpect(status().isBadRequest());
+        mvc.perform(withToken(get("/api/orders/me"), customer).param("page", "-1"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void customerCanCancelOnlyOwnPendingOrderAndAdminCanReadDetail() throws Exception {
+        String admin = adminToken();
+        String customer = customerToken();
+        String other = customerToken();
+        long productId = createProduct(admin, 5, "100.00").path("id").asLong();
+        JsonNode created = createOrder(customer, productId, 2);
+        long orderId = created.path("id").asLong();
+        mvc.perform(withToken(patch("/api/orders/{id}/cancel", orderId), other))
+                .andExpect(status().isNotFound());
+        mvc.perform(withToken(get("/api/admin/orders/{id}", orderId), customer))
+                .andExpect(status().isForbidden());
+        JsonNode detail = response(mvc.perform(withToken(get("/api/admin/orders/{id}", orderId), admin))
+                .andExpect(status().isOk()));
+        assertThat(detail.path("id").asLong()).isEqualTo(orderId);
+        assertThat(detail.path("items").size()).isEqualTo(1);
+        JsonNode cancelled = response(mvc.perform(withToken(patch("/api/orders/{id}/cancel", orderId), customer))
+                .andExpect(status().isOk()));
+        assertThat(cancelled.path("status").asText()).isEqualTo("CANCELLED");
+        assertThat(cancelled.path("updatedAt").asText()).isNotEqualTo(created.path("updatedAt").asText());
+        assertThat(stock(productId)).isEqualTo(5);
+        mvc.perform(withToken(patch("/api/orders/{id}/cancel", orderId), customer))
+                .andExpect(status().isConflict());
+        assertThat(stock(productId)).isEqualTo(5);
+        mvc.perform(withToken(get("/api/admin/orders/{id}", Long.MAX_VALUE), admin))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void customerCannotCancelConfirmedOrderAndAdminUpdateReturnsFreshTimestamp() throws Exception {
+        String admin = adminToken();
+        String customer = customerToken();
+        long productId = createProduct(admin, 5, "100.00").path("id").asLong();
+        JsonNode created = createOrder(customer, productId, 2);
+        long orderId = created.path("id").asLong();
+        JsonNode confirmed = response(changeOrderStatus(admin, orderId, "CONFIRMED")
+                .andExpect(status().isOk()));
+        assertThat(confirmed.path("updatedAt").asText()).isNotEqualTo(created.path("updatedAt").asText());
+        JsonNode persisted = response(mvc.perform(withToken(get("/api/admin/orders/{id}", orderId), admin))
+                .andExpect(status().isOk()));
+        assertThat(confirmed.path("updatedAt").asText()).isEqualTo(persisted.path("updatedAt").asText());
+        mvc.perform(withToken(patch("/api/orders/{id}/cancel", orderId), customer))
+                .andExpect(status().isConflict());
+        assertThat(stock(productId)).isEqualTo(3);
+    }
+
+    @Test
+    void errorsUseOneResponseShapeWithoutLeakingDatabaseDetails() throws Exception {
+        JsonNode unauthorized = response(mvc.perform(get("/api/orders/me"))
+                .andExpect(status().isUnauthorized()));
+        assertThat(unauthorized.path("status").asInt()).isEqualTo(401);
+        assertThat(unauthorized.path("code").asText()).isEqualTo("UNAUTHORIZED");
+        assertThat(unauthorized.path("path").asText()).isEqualTo("/api/orders/me");
+        assertThat(unauthorized.path("timestamp").asText()).isNotBlank();
+        String customer = customerToken();
+        JsonNode forbidden = response(mvc.perform(withToken(get("/api/admin/orders"), customer))
+                .andExpect(status().isForbidden()));
+        assertThat(forbidden.path("status").asInt()).isEqualTo(403);
+        assertThat(forbidden.path("code").asText()).isEqualTo("FORBIDDEN");
+        JsonNode malformed = response(mvc.perform(withToken(post("/api/orders"), customer)
+                .contentType(MediaType.APPLICATION_JSON).content("{invalid"))
+                .andExpect(status().isBadRequest()));
+        assertThat(malformed.path("code").asText()).isEqualTo("INVALID_REQUEST");
+        assertThat(malformed.path("path").asText()).isEqualTo("/api/orders");
+        String admin = adminToken();
+        String duplicateSku = unique("DUP");
+        String body = json.writeValueAsString(Map.of("sku", duplicateSku, "name", "Sản phẩm thử",
+                "price", 100, "stockQuantity", 1));
+        mvc.perform(withToken(post("/api/products"), admin).contentType(MediaType.APPLICATION_JSON)
+                .content(body)).andExpect(status().isCreated());
+        JsonNode conflict = response(mvc.perform(withToken(post("/api/products"), admin)
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isConflict()));
+        assertThat(conflict.path("status").asInt()).isEqualTo(409);
+        assertThat(conflict.path("message").asText()).doesNotContain("SQL", "constraint", "Duplicate entry");
+    }
+
+    @Test
     void creatingOrderDecreasesStock() throws Exception {
         String admin = adminToken();
         String customer = customerToken();

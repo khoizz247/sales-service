@@ -28,7 +28,7 @@ Mở <http://localhost:8080/swagger-ui/index.html>. Đăng nhập bằng `POST /
 | POST | `/api/admin/employees` | ADMIN | O3 | 201 |
 | GET | `/api/admin/employees/{userId}` | ADMIN | — | 200 |
 | PUT | `/api/admin/employees/{userId}` | ADMIN | O4 | 200 |
-| GET | `/api/products` | PUBLIC | — | 200 |
+| GET | `/api/products?page=0&size=20` | PUBLIC | — | 200 |
 | GET | `/api/products/search?q=ban-phim&page=0&size=20` | PUBLIC | — | 200 |
 | GET | `/api/products/{id}` | PUBLIC | — | 200 |
 | POST | `/api/products` | ADMIN | P1 | 201 |
@@ -57,13 +57,15 @@ Mở <http://localhost:8080/swagger-ui/index.html>. Đăng nhập bằng `POST /
 | DELETE | `/api/cart` | CUSTOMER | — | 204 |
 | POST | `/api/cart/checkout` | CUSTOMER | K2 | 201 |
 | POST | `/api/orders` | CUSTOMER | D1 | 201 |
-| GET | `/api/orders/me` | CUSTOMER | — | 200 |
+| GET | `/api/orders/me?page=0&size=20` | CUSTOMER | — | 200 |
 | GET | `/api/orders/me/search?code=&status=PENDING&page=0&size=20` | CUSTOMER | — | 200 |
 | GET | `/api/orders/{id}` | Chủ đơn CUSTOMER | — | 200 |
+| PATCH | `/api/orders/{id}/cancel` | Chủ đơn CUSTOMER, PENDING | — | 200 |
 | GET | `/api/orders/{orderId}/history` | Chủ đơn CUSTOMER | — | 200 |
 | GET | `/api/orders/{orderId}/payments` | Chủ đơn CUSTOMER | — | 200 |
-| GET | `/api/admin/orders` | ADMIN | — | 200 |
+| GET | `/api/admin/orders?page=0&size=20` | ADMIN | — | 200 |
 | GET | `/api/admin/orders/search?code=&status=PENDING&page=0&size=20` | ADMIN | — | 200 |
+| GET | `/api/admin/orders/{id}` | ADMIN | — | 200 |
 | PATCH | `/api/admin/orders/{id}/status` | ADMIN | D2 | 200 |
 | GET | `/api/admin/orders/{orderId}/history` | ADMIN | — | 200 |
 | GET | `/api/admin/orders/{orderId}/payments` | ADMIN | — | 200 |
@@ -104,3 +106,5 @@ Dùng từng object dưới đây trong ô **Request body** của endpoint có m
 | T2 | `{"status":"PAID","providerTransactionId":null}` (có thể đổi sang `FAILED`, `CANCELLED`, `REFUNDED` theo quy tắc thanh toán) |
 
 Mã lỗi cần thử: `400` body/giá trị không hợp lệ; `401` thiếu hoặc sai token; `403` token đúng nhưng sai role; `404` ID không tồn tại hoặc đơn không thuộc customer; `409` trùng SKU, quá tồn kho hoặc chuyển trạng thái sai. Xem [thiết kế và trạng thái đơn](CORE_DESIGN.md) và [test tự động](../src/test/java/vn/edu/sales/SalesApiIntegrationTest.java).
+
+Các endpoint danh sách gốc trả object phân trang `{items,page,size,totalElements,totalPages}` thay vì mảng JSON; `page` bắt đầu từ 0, `size` trong khoảng 1–100. `/search` giữ cùng kiểu response. Lỗi `400/401/403/404/409` và lỗi truy cập database trả `{timestamp,status,code,message,path,fields}`; không trả SQL hay chi tiết constraint nội bộ. File [demo.http](demo.http) có chuỗi request chạy trực tiếp trong IntelliJ.

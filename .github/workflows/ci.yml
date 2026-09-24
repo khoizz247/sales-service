@@ -35,6 +35,8 @@ jobs:
           curl --fail --silent --show-error http://localhost:8080/api/products > /dev/null
           docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" mysql -u"$MYSQL_USER" sales_service -N -e "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1"' | grep -x 3
           docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" mysql -u"$MYSQL_USER" sales_service -N -e "SHOW FULL TABLES"' | grep -v '^flyway_schema_history' | grep -c 'BASE TABLE' | grep -x 17
+      - name: Verify concurrent purchases against MySQL
+        run: python3 scripts/concurrent_order_test.py
       - name: Show service logs on failure
         if: failure()
         run: docker compose logs --tail=100

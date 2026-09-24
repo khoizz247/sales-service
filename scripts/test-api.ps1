@@ -134,7 +134,7 @@ Call-Api POST '/api/orders' 403 $adminToken $orderBody | Out-Null
 $profile = Call-Api GET '/api/users/me/profile' 200 $customerToken $null
 $me = Call-Api GET '/api/users/me' 200 $customerToken $null
 Assert-Equal $profile.userId $me.id 'Customer profile belongs to registration'
-$mine = @(Call-Api GET '/api/orders/me' 200 $customerToken $null)
+$mine = @((Call-Api GET '/api/orders/me' 200 $customerToken $null).items)
 if (@($mine | Where-Object { $_.id -eq $order.id }).Count -ne 1) {
     throw 'Created order missing from customer order list'
 }

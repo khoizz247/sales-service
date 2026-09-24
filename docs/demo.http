@@ -1,0 +1,79 @@
+# IntelliJ HTTP Client demo. Run requests in order, one block at a time.
+# Edit customerEmail each time you want to register a new account.
+# Admin credentials must match your BOOTSTRAP_ADMIN_EMAIL/PASSWORD values.
+# Docker/Flyway seeds product 1 on a fresh database; adjust productId if needed.
+@baseUrl = http://localhost:8080
+@customerEmail = demo.customer@example.com
+@customerPassword = Test@12345
+@adminEmail = admin@example.com
+@adminPassword = Admin@123
+@productId = 1
+
+### Register customer (only the first time for this email)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "fullName": "Khách demo",
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### Log in as customer; saves customerToken
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+> {% client.global.set("customerToken", response.body.accessToken); %}
+
+### Log in as admin; saves adminToken
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+> {% client.global.set("adminToken", response.body.accessToken); %}
+
+### Paginated catalog
+GET {{baseUrl}}/api/products?page=0&size=2
+
+### Search by name or SKU
+GET {{baseUrl}}/api/products/search?q=KB-MECH&page=0&size=10
+
+### Create order while product has stock; saves orderId
+POST {{baseUrl}}/api/orders
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "recipientName": "Nguyễn Văn A",
+  "recipientPhone": "0901234567",
+  "shippingAddress": "123 Đường Mẫu, Hà Nội",
+  "items": [{"productId": {{productId}}, "quantity": 1}]
+}
+> {% client.global.set("orderId", response.body.id); %}
+
+### Customer's paginated order list
+GET {{baseUrl}}/api/orders/me?page=0&size=10
+Authorization: Bearer {{customerToken}}
+
+### Admin order detail
+GET {{baseUrl}}/api/admin/orders/{{orderId}}
+Authorization: Bearer {{adminToken}}
+
+### Customer cancels own PENDING order, restoring stock
+PATCH {{baseUrl}}/api/orders/{{orderId}}/cancel
+Authorization: Bearer {{customerToken}}
+
+### Confirm order is CANCELLED
+GET {{baseUrl}}/api/orders/{{orderId}}
+Authorization: Bearer {{customerToken}}
+
+### Admin's paginated order list
+GET {{baseUrl}}/api/admin/orders?page=0&size=10
+Authorization: Bearer {{adminToken}}

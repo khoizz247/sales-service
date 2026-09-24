@@ -1,5 +1,6 @@
 package vn.edu.sales.infrastructure.persistence.order;
 
+import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Repository;
 import vn.edu.sales.application.port.out.OrderRepository;
 import vn.edu.sales.domain.model.Order;
@@ -12,14 +13,19 @@ import java.util.Optional;
 @Repository
 public class OrderRepositoryAdapter implements OrderRepository {
     private final SpringDataOrderRepository repository;
+    private final EntityManager entityManager;
 
-    public OrderRepositoryAdapter(SpringDataOrderRepository repository) {
+    public OrderRepositoryAdapter(SpringDataOrderRepository repository, EntityManager entityManager) {
         this.repository = repository;
+        this.entityManager = entityManager;
     }
 
     @Override
     public Order save(Order order) {
-        return toDomain(repository.save(toEntity(order)));
+        // Read back the database value, including its timestamp precision, before responding.
+        OrderJpaEntity saved = repository.saveAndFlush(toEntity(order));
+        entityManager.refresh(saved);
+        return toDomain(saved);
     }
 
     @Override

@@ -37,8 +37,10 @@ public class OrderController {
     }
 
     @GetMapping("/me")
-    public List<OrderResponse> mine(Authentication authentication) {
-        return orderService.getMine(authentication.getName()).stream().map(OrderResponse::from).toList();
+    public PagedOrders mine(Authentication authentication,
+                            @RequestParam(defaultValue = "0") int page,
+                            @RequestParam(defaultValue = "20") int size) {
+        return PagedOrders.from(orderService.searchMine(authentication.getName(), null, "", page, size));
     }
 
     @GetMapping("/me/search")
@@ -53,6 +55,11 @@ public class OrderController {
     @GetMapping("/{id}")
     public OrderResponse detail(Authentication authentication, @PathVariable Long id) {
         return OrderResponse.from(orderService.getMineById(authentication.getName(), id));
+    }
+
+    @PatchMapping("/{id}/cancel")
+    public OrderResponse cancel(Authentication authentication, @PathVariable Long id) {
+        return OrderResponse.from(orderService.cancelMine(authentication.getName(), id));
     }
 
     public record CreateOrderRequest(

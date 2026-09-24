@@ -88,6 +88,23 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng: " + id));
     }
 
+    public Order getAdminById(Long id) {
+        return orderRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng: " + id));
+    }
+
+    public Order cancelMine(String customerEmail, Long id) {
+        return transactionRunner.execute(() -> {
+            User user = activeUser(customerEmail);
+            Order order = orderRepository.findByIdForUpdate(id)
+                    .filter(found -> found.userId().equals(user.id()))
+                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng: " + id));
+            if (order.status() != OrderStatus.PENDING)
+                throw new BusinessConflictException("Khách hàng chỉ được hủy đơn đang PENDING");
+            return changeStatusLocked(order, OrderStatus.CANCELLED, user.id());
+        });
+    }
+
     public List<Order> getAll(OrderStatus status) {
         return orderRepository.findAll(status);
     }
@@ -117,18 +134,22 @@ public class OrderService {
         return transactionRunner.execute(() -> {
             Order order = orderRepository.findByIdForUpdate(id)
                     .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng: " + id));
-            if (order.status() == nextStatus) return order;
-            validateTransition(order.status(), nextStatus);
-            if (nextStatus == OrderStatus.CANCELLED) {
-                if (payments.paidTotal(id).signum() > 0)
-                    throw new BusinessConflictException("Đơn đã thanh toán, cần hoàn tiền trước khi hủy");
-                restoreStock(order);
-            }
-            return orderRepository.save(order.withStatus(nextStatus));
+            return changeStatusLocked(order, nextStatus, null);
         });
     }
 
-    private void restoreStock(Order order) {
+    private Order changeStatusLocked(Order order, OrderStatus nextStatus, Long actorUserId) {
+        if (order.status() == nextStatus) return order;
+        validateTransition(order.status(), nextStatus);
+        if (nextStatus == OrderStatus.CANCELLED) {
+            if (payments.paidTotal(order.id()).signum() > 0)
+                throw new BusinessConflictException("Đơn đã thanh toán, cần hoàn tiền trước khi hủy");
+            restoreStock(order, actorUserId);
+        }
+        return orderRepository.save(order.withStatus(nextStatus));
+    }
+
+    private void restoreStock(Order order, Long actorUserId) {
         List<Long> ids = order.items().stream().map(OrderItem::productId).sorted().toList();
         Map<Long, Product> products = productRepository.findAllByIdsForUpdate(ids).stream()
                 .collect(Collectors.toMap(Product::id, Function.identity()));
@@ -142,7 +163,7 @@ public class OrderService {
             Product before = products.get(item.productId());
             inventory.record(before.id(), order.id(), "SALE_REVERSAL", item.quantity(), before.stockQuantity(),
                     before.stockQuantity() + item.quantity(), order.orderCode() + "-REVERSAL-" + before.id(),
-                    "Hủy đơn hàng", null);
+                    "Hủy đơn hàng", actorUserId);
         }
     }
 

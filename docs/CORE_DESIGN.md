@@ -68,7 +68,7 @@ JPA hoặc JdbcTemplate adapter ── MySQL sales_service / H2 test
 stateDiagram-v2
     [*] --> PENDING: Customer tạo đơn / checkout
     PENDING --> CONFIRMED: Admin xác nhận
-    PENDING --> CANCELLED: Admin hủy
+    PENDING --> CANCELLED: Customer chủ đơn hoặc Admin hủy
     CONFIRMED --> SHIPPING: Admin giao hàng
     CONFIRMED --> CANCELLED: Admin hủy
     SHIPPING --> COMPLETED: Admin hoàn tất
@@ -77,6 +77,6 @@ stateDiagram-v2
 ```
 
 - Tạo đơn `PENDING`: kiểm tra tồn kho, chốt giá/tổng tiền, trừ kho và ghi `SALE` trong cùng transaction.
-- Hủy từ `PENDING` hoặc `CONFIRMED`: hoàn kho và ghi `SALE_REVERSAL` đúng một lần. Nếu đã có tiền `PAID`, phải chuyển khoản thanh toán sang `REFUNDED` trước.
-- `SHIPPING` không được hủy; chỉ chuyển `COMPLETED`. `COMPLETED` và `CANCELLED` là trạng thái cuối. Chuyển sai trả `409`; gửi lại trạng thái hiện tại trả `200` và không hoàn kho lần nữa.
+- Customer chỉ được hủy đơn của chính mình khi còn `PENDING`; admin có thể hủy từ `PENDING` hoặc `CONFIRMED`. Hủy hoàn kho và ghi `SALE_REVERSAL` đúng một lần. Nếu đã có tiền `PAID`, phải chuyển khoản thanh toán sang `REFUNDED` trước.
+- `SHIPPING` không được hủy; chỉ chuyển `COMPLETED`. `COMPLETED` và `CANCELLED` là trạng thái cuối. Chuyển sai trả `409`. Admin gửi lại trạng thái hiện tại nhận `200`; customer hủy lại nhận `409`. Cả hai trường hợp đều không hoàn kho lần nữa.
 - Trên MySQL, trigger ghi `order_status_history`; trên H2 test, endpoint history có thể trả danh sách rỗng.

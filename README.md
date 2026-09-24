@@ -9,14 +9,14 @@ Backend cơ bản cho bài tập hệ thống bán hàng trực tuyến. Project
 - Người dùng đã đăng nhập có thể đổi mật khẩu tại `POST /api/users/me/password`.
 - Đăng nhập và nhận JWT.
 - `GET /api/users/me` yêu cầu xác thực.
-- Xem danh sách và chi tiết sản phẩm.
+- Xem danh sách sản phẩm có phân trang (`page`, `size`) và chi tiết sản phẩm.
 - Tìm kiếm sản phẩm có phân trang tại `GET /api/products/search?q=&page=0&size=20`.
 - Tìm đơn có phân trang theo mã/trạng thái cho admin và khách hàng.
 - Admin thêm, cập nhật, chỉnh tồn kho và soft delete sản phẩm.
-- Customer tạo đơn hàng, xem danh sách và chi tiết đơn của mình.
+- Customer tạo đơn hàng, xem danh sách có phân trang và chi tiết đơn của mình; tự hủy đơn còn `PENDING`.
 - Customer quản lý giỏ hàng và checkout; giá và tồn kho được kiểm tra lại khi checkout.
 - Tạo đơn và trừ kho trong cùng transaction; hủy đơn sẽ hoàn kho.
-- Admin xem đơn và cập nhật trạng thái đơn.
+- Admin xem danh sách có phân trang, chi tiết đơn và cập nhật trạng thái đơn.
 - Danh mục sản phẩm, nhà cung cấp và liên kết sản phẩm–danh mục/nhà cung cấp.
 - Customer quản lý địa chỉ của chính mình.
 - Admin quản lý văn phòng và hồ sơ nhân viên; customer xem/sửa hồ sơ cá nhân, admin quản lý hạn mức tín dụng.
@@ -137,7 +137,7 @@ Tài khoản này chỉ tự tạo khi dùng H2 mặc định hoặc bật seed 
 |---|---|---|
 | POST | `/api/auth/register` | Công khai |
 | POST | `/api/auth/login` | Công khai |
-| GET | `/api/products` | Công khai |
+| GET | `/api/products?page=0&size=20` | Công khai |
 | GET | `/api/products/search?q=&page=0&size=20` | Công khai |
 | GET | `/api/products/{id}` | Công khai |
 | GET | `/api/users/me` | Đã đăng nhập |
@@ -166,12 +166,14 @@ Tài khoản này chỉ tự tạo khi dùng H2 mặc định hoặc bật seed 
 | GET, DELETE | `/api/cart` | CUSTOMER |
 | PUT, DELETE | `/api/cart/items/{productId}` | CUSTOMER |
 | POST | `/api/cart/checkout` | CUSTOMER |
-| GET | `/api/orders/me` | CUSTOMER |
+| GET | `/api/orders/me?page=0&size=20` | CUSTOMER |
 | GET | `/api/orders/me/search?code=&status=&page=0&size=20` | CUSTOMER |
 | GET | `/api/orders/{id}` | Chủ đơn hàng |
+| PATCH | `/api/orders/{id}/cancel` | Chủ đơn hàng, chỉ khi `PENDING` |
 | GET | `/api/orders/{id}/history`, `/api/orders/{id}/payments` | Chủ đơn hàng |
-| GET | `/api/admin/orders` | ADMIN |
+| GET | `/api/admin/orders?page=0&size=20` | ADMIN |
 | GET | `/api/admin/orders/search?code=&status=&page=0&size=20` | ADMIN |
+| GET | `/api/admin/orders/{id}` | ADMIN |
 | PATCH | `/api/admin/orders/{id}/status` | ADMIN |
 | GET | `/api/admin/orders/{id}/history`, `/api/admin/orders/{id}/payments` | ADMIN |
 | POST | `/api/admin/orders/{id}/payments` | ADMIN |
@@ -245,7 +247,9 @@ Trong Swagger, nhấn **Authorize** và dán trực tiếp giá trị `accessTok
 
 Chạy bộ JUnit/MockMvc bằng `mvnw.cmd test` (Windows), `./mvnw test` (macOS/Linux), hoặc chọn Maven → Lifecycle → `test` trong IntelliJ. Các test dùng profile `test` và H2 riêng, không kết nối MySQL của thành viên trong nhóm. Unit test kiểm tra `ProductService`, `AuthService`, `OrderService`; integration test kiểm tra phân quyền `CUSTOMER`/`ADMIN`, JWT `401`/`403`, quản lý sản phẩm, tồn kho khi đặt/hủy đơn, hủy lặp, chuyển trạng thái `409`, tổng tiền và các API hồ sơ, địa chỉ, văn phòng, nhân viên, danh mục, nhà cung cấp, thanh toán. Xem [src/test/java/vn/edu/sales](src/test/java/vn/edu/sales).
 
-Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) chạy lại JUnit và dựng Docker Compose trên database rỗng khi push/pull request tới `main`.
+Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) chạy lại JUnit, dựng Docker Compose trên database rỗng và thử hai customer mua đồng thời toàn bộ tồn kho của một sản phẩm MySQL khi push/pull request tới `main`. Test H2 cũng có tình huống đồng thời. **Script MySQL này tiêu thụ tồn kho, chỉ chạy trên database dùng một lần.**
+
+Để demo thủ công trong IntelliJ, mở [docs/demo.http](docs/demo.http) và bấm nút chạy cạnh từng request. Sửa email/mật khẩu ADMIN cho khớp tài khoản bootstrap của bạn, đăng nhập để lưu JWT, sau đó thử phân trang, tạo đơn, xem chi tiết và customer hủy đơn.
 
 Có thể chạy thêm smoke test HTTP bằng [scripts/test-api.ps1](scripts/test-api.ps1) trên một phiên H2 **dành riêng cho test**:
 

@@ -91,6 +91,20 @@ class OrderServiceTest {
     }
 
     @Test
+    void customerCancelsOnlyOwnPendingOrderAndInventoryRecordsActor() {
+        Order pending = order(OrderStatus.PENDING);
+        when(orders.findByIdForUpdate(21L)).thenReturn(Optional.of(pending));
+        when(orders.save(any(Order.class))).thenAnswer(call -> call.getArgument(0));
+        when(products.findAllByIdsForUpdate(List.of(11L))).thenReturn(List.of(keyboard));
+        when(payments.paidTotal(21L)).thenReturn(BigDecimal.ZERO);
+
+        assertThat(service.cancelMine("customer@example.com", 21L).status())
+                .isEqualTo(OrderStatus.CANCELLED);
+        verify(inventory).record(eq(11L), eq(21L), eq("SALE_REVERSAL"), eq(2), eq(5), eq(7),
+                anyString(), anyString(), eq(3L));
+    }
+
+    @Test
     void invalidTransitionAndPaidCancellationReturnConflict() {
         when(orders.findByIdForUpdate(21L)).thenReturn(Optional.of(order(OrderStatus.PENDING)));
         assertThatThrownBy(() -> service.changeStatus(21L, OrderStatus.COMPLETED))

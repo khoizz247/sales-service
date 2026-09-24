@@ -36,8 +36,9 @@ public class ProductController {
     }
 
     @GetMapping
-    public List<ProductResponse> getAll() {
-        return productService.getAllActive().stream().map(ProductResponse::from).toList();
+    public PagedProducts getAll(@RequestParam(defaultValue = "0") int page,
+                                @RequestParam(defaultValue = "20") int size) {
+        return search("", page, size);
     }
 
     @GetMapping("/search")

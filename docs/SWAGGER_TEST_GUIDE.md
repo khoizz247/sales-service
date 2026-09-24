@@ -122,6 +122,8 @@ Kết quả mong đợi: `200`, `creditLimit: 1000000`. Giá trị âm trả `40
 | ADMIN | `PUT /api/admin/products/{productId}/suppliers/{supplierId}` | `204` |
 | CUSTOMER | `POST /api/users/me/addresses` rồi `GET /api/users/me/addresses` | `201`, `200` |
 | CUSTOMER | `POST /api/orders` rồi `GET /api/orders/me` | `201`, `200` |
+| CUSTOMER | `PATCH /api/orders/{orderId}/cancel` khi còn `PENDING` | `200`, hoàn kho; hủy lại `409` |
+| ADMIN | `GET /api/admin/orders/{orderId}` | `200`, gồm sản phẩm trong đơn |
 | ADMIN | `POST /api/admin/orders/{orderId}/payments` với `{"method":"COD","amount":890000}` | `201`, `PENDING` |
 | ADMIN | `PATCH /api/admin/payments/{paymentId}/status` với `{"status":"PAID"}` | `200`, `PAID` |
 | ADMIN | `GET /api/admin/products/{productId}/inventory` | `200`, có biến động `SALE` sau khi đặt đơn |

@@ -1,6 +1,7 @@
 package vn.edu.sales.config;
 
 import jakarta.servlet.http.HttpServletResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -13,6 +14,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import vn.edu.sales.infrastructure.security.JwtAuthenticationFilter;
+import vn.edu.sales.api.common.ApiError;
 
 @Configuration
 @EnableMethodSecurity
@@ -24,7 +26,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter,
+                                            ObjectMapper objectMapper) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
@@ -34,12 +37,16 @@ public class SecurityConfig {
                         .authenticationEntryPoint((request, response, exception) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                             response.setContentType("application/json;charset=UTF-8");
-                            response.getWriter().write("{\"code\":\"UNAUTHORIZED\",\"message\":\"Yêu cầu đăng nhập\"}");
+                            objectMapper.writeValue(response.getWriter(), ApiError.of(
+                                    HttpServletResponse.SC_UNAUTHORIZED, "UNAUTHORIZED",
+                                    "Yêu cầu đăng nhập", request.getRequestURI()));
                         })
                         .accessDeniedHandler((request, response, exception) -> {
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                             response.setContentType("application/json;charset=UTF-8");
-                            response.getWriter().write("{\"code\":\"FORBIDDEN\",\"message\":\"Không đủ quyền truy cập\"}");
+                            objectMapper.writeValue(response.getWriter(), ApiError.of(
+                                    HttpServletResponse.SC_FORBIDDEN, "FORBIDDEN",
+                                    "Không đủ quyền truy cập", request.getRequestURI()));
                         }))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/h2-console/**", "/error").permitAll()
